@@ -21,6 +21,16 @@ float headYaw = 0.0f, headPitch = 0.0f;
 float camX = 0.0f, camY = 5.0f, camZ = 15.0f; // Adjusted Z value for better view
 float camPitch = 0.0f, camYaw = 0.0f;
 
+// Variables to save the main camera state
+float savedCamX, savedCamY, savedCamZ;
+float savedCamPitch, savedCamYaw;
+
+// Secondary camera parameters (inside robot head)
+float headCamX = 0.0f, headCamY = 0.75f, headCamZ = 0.0f;
+float headCamYaw = 0.0f, headCamPitch = 0.0f;
+
+bool useHeadCam = false; // Boolean flag to switch cameras
+
 // Lighting parameters
 float lightPos[] = {1.2f, 2.5f, 2.0f, 1.0f};
 float ambientStrength = 0.1f;
@@ -87,6 +97,30 @@ void drawLightBox()
     glPopMatrix();
 }
 
+void drawRobotHead(bool visible)
+{
+    if (!visible) return;
+
+    // Draw head
+    glPushMatrix();
+    glTranslatef(0.0f, 0.75f, 0.0f);
+    glRotatef(headYaw, 0.0f, 1.0f, 0.0f);
+    glRotatef(headPitch, 1.0f, 0.0f, 0.0f);
+    glColor3f(0.0f, 1.0f, 0.0f);
+    glutSolidSphere(0.5f, 20, 20);
+
+    // Draw eyes
+    glPushMatrix();
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glTranslatef(0.2f, 0.1f, 0.45f);
+    glutSolidSphere(0.1f, 20, 20);
+    glTranslatef(-0.4f, 0.0f, 0.0f);
+    glutSolidSphere(0.1f, 20, 20);
+    glPopMatrix();
+
+    glPopMatrix();
+}
+
 void drawRobot()
 {
     glPushMatrix();
@@ -99,13 +133,7 @@ void drawRobot()
     glPopMatrix();
 
     // Draw head
-    glPushMatrix();
-    glTranslatef(0.0f, 0.75f, 0.0f);
-    glRotatef(headYaw, 0.0f, 1.0f, 0.0f);
-    glRotatef(headPitch, 1.0f, 0.0f, 0.0f);
-    glColor3f(0.0f, 1.0f, 0.0f);
-    glutSolidSphere(0.5f, 20, 20);
-    glPopMatrix();
+    drawRobotHead(!useHeadCam);
 
     // Draw right arm
     glPushMatrix();
@@ -152,7 +180,24 @@ void display()
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    gluLookAt(camX, camY, camZ, camX + sin(camYaw), camY + sin(camPitch), camZ - cos(camYaw), 0.0f, 1.0f, 0.0f);
+
+    if (useHeadCam)
+    {
+        // Use the secondary camera inside the robot's head
+        float eyeX = robotX;
+        float eyeY = robotY + headCamY;
+        float eyeZ = robotZ + headCamZ;
+        float lookX = eyeX + sin(glm::radians(headYaw)) * cos(glm::radians(headPitch));
+        float lookY = eyeY + sin(glm::radians(headPitch));
+        float lookZ = eyeZ - cos(glm::radians(headYaw)) * cos(glm::radians(headPitch));
+
+        gluLookAt(eyeX, eyeY, eyeZ, lookX, lookY, lookZ, 0.0f, 1.0f, 0.0f);
+    }
+    else
+    {
+        // Use the main camera
+        gluLookAt(camX, camY, camZ, camX + sin(camYaw), camY + sin(camPitch), camZ - cos(camYaw), 0.0f, 1.0f, 0.0f);
+    }
 
     // Set up lighting
     setupLighting();
@@ -207,10 +252,10 @@ void display()
     ImGui::PushFont(smallFont);
     ImGui::Text("Yaw");
     ImGui::SameLine();
-    ImGui::SliderFloat("##Head Yaw", &headYaw, -90.0f, 90.0f);
+    ImGui::SliderFloat("##Head Yaw", &headYaw, -60.0f, 60.0f);
     ImGui::Text("Pitch");
     ImGui::SameLine();
-    ImGui::SliderFloat("##Head Pitch", &headPitch, -45.0f, 45.0f);
+    ImGui::SliderFloat("##Head Pitch", &headPitch, -35.0f, 15.0f);
     ImGui::PopFont();
 
     ImGui::Separator();
@@ -246,12 +291,46 @@ void display()
 
     ImGui::Dummy(ImVec2(0.0f, 7.0f));
     ImGui::Text("Ambient Strength");
+    ImGui::PushFont(smallFont);
     ImGui::SliderFloat("##Ambient Strength", &ambientStrength, 0.0f, 1.0f);
+    ImGui::PopFont();
     ImGui::Dummy(ImVec2(0.0f, 7.0f));
     ImGui::Text("Point Light Intensity");
+    ImGui::PushFont(smallFont);
     ImGui::SliderFloat("##Point Light Intensity", &pointLightIntensity, 0.0f, 1.0f);
+    ImGui::PopFont();
 
     ImGui::Separator();
+
+    if (ImGui::Checkbox("Use Head Camera", &useHeadCam))
+    {
+        // Save or restore the camera state when switching
+        if (useHeadCam)
+        {
+            // Save the current camera state
+            savedCamX = camX;
+            savedCamY = camY;
+            savedCamZ = camZ;
+            savedCamPitch = camPitch;
+            savedCamYaw = camYaw;
+
+            // Reset robot movement
+            robotX = robotY = robotZ = 0.0f;
+        }
+        else
+        {
+            // Restore the saved camera state
+            camX = savedCamX;
+            camY = savedCamY;
+            camZ = savedCamZ;
+            camPitch = savedCamPitch;
+            camYaw = savedCamYaw;
+
+            // Ensure the head is looking at the same direction as the secondary camera
+            headYaw = headCamYaw;
+            headPitch = headCamPitch;
+        }
+    }
 
     if (ImGui::Button("Help"))
     {
@@ -298,14 +377,17 @@ void reshape(int width, int height)
 
 void keyboard(unsigned char key, int x, int y)
 {
-    if (key == 'w')
-        robotZ -= 0.1f;
-    if (key == 's')
-        robotZ += 0.1f;
-    if (key == 'a')
-        robotX -= 0.1f;
-    if (key == 'd')
-        robotX += 0.1f;
+    if (!useHeadCam)
+    {
+        if (key == 'w')
+            robotZ -= 0.1f;
+        if (key == 's')
+            robotZ += 0.1f;
+        if (key == 'a')
+            robotX -= 0.1f;
+        if (key == 'd')
+            robotX += 0.1f;
+    }
     glutPostRedisplay();
 }
 
@@ -329,13 +411,36 @@ void mouseMotion(int x, int y)
     xoffset *= sensitivity;
     yoffset *= sensitivity;
 
-    headYaw += xoffset;
-    headPitch += yoffset;
+    if (useHeadCam)
+    {
+        headCamYaw += xoffset;
+        headCamPitch += yoffset;
 
-    if (headPitch > 45.0f)
-        headPitch = 45.0f;
-    if (headPitch < -45.0f)
-        headPitch = -45.0f;
+        // Enforce yaw and pitch limits for the head camera
+        if (headCamYaw > 60.0f)
+            headCamYaw = 60.0f;
+        if (headCamYaw < -60.0f)
+            headCamYaw = -60.0f;
+        if (headCamPitch > 15.0f)
+            headCamPitch = 15.0f;
+        if (headCamPitch < -35.0f)
+            headCamPitch = -35.0f;
+    }
+    else
+    {
+        headYaw += xoffset;
+        headPitch += yoffset;
+
+        // Enforce yaw and pitch limits for the head
+        if (headYaw > 60.0f)
+            headYaw = 60.0f;
+        if (headYaw < -60.0f)
+            headYaw = -60.0f;
+        if (headPitch > 15.0f)
+            headPitch = 15.0f;
+        if (headPitch < -35.0f)
+            headPitch = -35.0f;
+    }
 
     glutPostRedisplay();
 }
