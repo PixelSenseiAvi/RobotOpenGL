@@ -7,7 +7,10 @@
 #include "imgui.h"
 #include "imgui_impl_glut.h"
 #include "imgui_impl_opengl2.h"
+
+#ifdef DEBUG
 #include <iostream>
+#endif
 
 // Global variables for robot parts transformations
 float robotX = 0.0f, robotY = 0.0f, robotZ = 0.0f;
@@ -63,7 +66,7 @@ void drawLightBox()
     GLfloat yellow[] = {1.0f, 1.0f, 0.0f, 1.0f};
     GLfloat brightYellow[] = {1.0f, 1.0f, 0.0f, 1.0f};
     GLfloat white[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    GLfloat emission[] = {0.3f, 0.3f, 0.0f, 1.0f}; // Add emissive property for brightness
+    GLfloat emission[] = {0.5f, 0.5f, 0.0f, 1.0f}; // Higher emissive property for brightness
 
     glMaterialfv(GL_FRONT, GL_AMBIENT, yellow);
     glMaterialfv(GL_FRONT, GL_DIFFUSE, brightYellow);
@@ -241,8 +244,10 @@ void display()
     ImGui::SliderFloat("##Light Position W", &lightPos[3], -10.0f, 10.0f);
     ImGui::PopFont();
 
+    ImGui::Dummy(ImVec2(0.0f, 7.0f));
     ImGui::Text("Ambient Strength");
     ImGui::SliderFloat("##Ambient Strength", &ambientStrength, 0.0f, 1.0f);
+    ImGui::Dummy(ImVec2(0.0f, 7.0f));
     ImGui::Text("Point Light Intensity");
     ImGui::SliderFloat("##Point Light Intensity", &pointLightIntensity, 0.0f, 1.0f);
 
@@ -252,7 +257,9 @@ void display()
     {
         show_help_window = true;
     }
-    ImGui::SameLine(); ImGui::Dummy(ImVec2(7.0f, 0.0f)); ImGui::SameLine();
+    ImGui::SameLine();
+    ImGui::Dummy(ImVec2(7.0f, 0.0f));
+    ImGui::SameLine();
     if (ImGui::Button("Quit"))
     {
         exit(0);
