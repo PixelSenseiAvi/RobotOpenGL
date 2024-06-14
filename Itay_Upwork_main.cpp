@@ -1,12 +1,15 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include <GL/glew.h>
 #include <GL/freeglut.h>
 #include "imgui.h"
 #include "imgui_impl_glut.h"
 #include "imgui_impl_opengl2.h"
+#include <SOIL/SOIL.h>
 
 #ifdef DEBUG
 #include <iostream>
@@ -14,8 +17,11 @@
 
 // Global variables for robot parts transformations
 float robotX = 0.0f, robotY = 0.0f, robotZ = 0.0f;
-float shoulderAngle = 0.0f, elbowAngle = 0.0f, wristAngle = 0.0f;
+float shoulderPitch = 0.0f, shoulderYaw = 0.0f, shoulderRoll = 0.0f;
+float elbowPitch = 0.0f, elbowYaw = 0.0f, elbowRoll = 0.0f;
+float wristPitch = 0.0f, wristYaw = 0.0f, wristRoll = 0.0f;
 float headYaw = 0.0f, headPitch = 0.0f;
+float hipAngle = 0.0f, kneeAngle = 0.0f;
 
 // Camera parameters
 float camX = 0.0f, camY = 5.0f, camZ = 15.0f; // Adjusted Z value for better view
@@ -44,6 +50,9 @@ bool show_help_window = false; // Variable to control the display of the help wi
 
 ImFont *smallFont, *font;
 
+// Floor Texture
+GLuint floorTexture;
+
 void setupLighting()
 {
     glEnable(GL_LIGHTING);
@@ -57,6 +66,17 @@ void setupLighting()
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuseLight);
     glLightfv(GL_LIGHT0, GL_SPECULAR, specularLight);
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
+}
+
+void loadTextures()
+{
+    floorTexture = SOIL_load_OGL_texture("../Assets/tiles_0006_color_1k.jpg", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y);
+    if (floorTexture == 0)
+    {
+#ifdef DEBUG
+        std::cerr << "Failed to load floor texture!" << std::endl;
+#endif
+    }
 }
 
 void drawLightBox()
@@ -99,11 +119,12 @@ void drawLightBox()
 
 void drawRobotHead(bool visible)
 {
-    if (!visible) return;
+    if (!visible)
+        return;
 
     // Draw head
     glPushMatrix();
-    glTranslatef(0.0f, 0.75f, 0.0f);
+    glTranslatef(0.0f, 1.75f, 0.0f); // Move the head up
     glRotatef(headYaw, 0.0f, 1.0f, 0.0f);
     glRotatef(headPitch, 1.0f, 0.0f, 0.0f);
     glColor3f(0.0f, 1.0f, 0.0f);
@@ -121,51 +142,220 @@ void drawRobotHead(bool visible)
     glPopMatrix();
 }
 
-void drawRobot()
+void drawLimb(float length, float radius)
+{
+    GLUquadric *quadric = gluNewQuadric();
+    gluCylinder(quadric, radius, radius, length, 20, 20);
+    gluDeleteQuadric(quadric);
+}
+
+void drawJoint(float radius)
+{
+    glutSolidSphere(radius, 20, 20);
+}
+
+void drawMiddlePart()
 {
     glPushMatrix();
-    glTranslatef(robotX, robotY, robotZ);
-
-    // Draw body
-    glPushMatrix();
-    glColor3f(1.0f, 0.0f, 0.0f);
-    glutSolidCube(1.0f);
-    glPopMatrix();
-
-    // Draw head
-    drawRobotHead(!useHeadCam);
-
-    // Draw right arm
-    glPushMatrix();
-    glTranslatef(0.75f, 0.0f, 0.0f);
-    glRotatef(shoulderAngle, 1.0f, 0.0f, 0.0f);
-    glPushMatrix();
-    glTranslatef(0.5f, 0.0f, 0.0f);
+    glTranslatef(0.0f, 0.9f, 0.0f);
+    glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
     glColor3f(0.0f, 0.0f, 1.0f);
-    glutSolidCube(0.5f);
+    drawLimb(0.75f, 0.15f);
     glPopMatrix();
+}
 
-    glTranslatef(0.5f, 0.0f, 0.0f);
-    glRotatef(elbowAngle, 0.0f, 0.0f, 1.0f);
+void drawRightArm()
+{
     glPushMatrix();
-    glTranslatef(0.25f, 0.0f, 0.0f);
-    glutSolidCube(0.5f);
-    glPopMatrix();
+    glTranslatef(0.65f, 1.0f, 0.0f);
 
-    glTranslatef(0.25f, 0.0f, 0.0f);
-    glRotatef(wristAngle, 0.0f, 1.0f, 0.0f);
+    // Apply shoulder rotations using quaternions
+    glm::quat shoulderQuaternion = glm::angleAxis(glm::radians(shoulderYaw), glm::vec3(0.0f, 1.0f, 0.0f)) *
+                                   glm::angleAxis(glm::radians(shoulderPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
+                                   glm::angleAxis(glm::radians(shoulderRoll), glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 shoulderRotation = glm::toMat4(shoulderQuaternion);
+
+    glMultMatrixf(glm::value_ptr(shoulderRotation));
+
+    // Shoulder joint
+    glColor3f(0.0f, 1.0f, 0.0f);
+    drawJoint(0.25f);
+
     glPushMatrix();
-    glTranslatef(0.1f, 0.0f, 0.0f);
-    glutSolidCube(0.2f);
+    glTranslatef(0.0f, -0.25f, 0.0f);  // Adjust for half the cylinder length
+    glRotatef(90, 1.0f, 0.0f, 0.0f);  // Align cylinder along y-axis
+    glColor3f(0.0f, 0.0f, 1.0f);
+    drawLimb(0.25f, 0.1f);
     glPopMatrix();
 
+    glTranslatef(0.0f, -0.5f, 0.0f);  // Move to the end of the first limb
+
+    // Apply elbow rotations using quaternions
+    glm::quat elbowQuaternion = glm::angleAxis(glm::radians(elbowYaw), glm::vec3(0.0f, 1.0f, 0.0f)) *
+                                glm::angleAxis(glm::radians(elbowPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
+                                glm::angleAxis(glm::radians(elbowRoll), glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 elbowRotation = glm::toMat4(elbowQuaternion);
+
+    glMultMatrixf(glm::value_ptr(elbowRotation));
+
+    // Elbow joint
+    glColor3f(0.0f, 1.0f, 0.0f);
+    drawJoint(0.2f);
+
+    glPushMatrix();
+    glTranslatef(0.0f, -0.25f, 0.0f);  // Adjust for half the cylinder length
+    glRotatef(90, 1.0f, 0.0f, 0.0f);  // Align cylinder along y-axis
+    glColor3f(0.0f, 0.0f, 1.0f);
+    drawLimb(0.25f, 0.1f);
+    glPopMatrix();
+
+    glTranslatef(0.0f, -0.5f, 0.0f);  // Move to the end of the second limb
+
+    // Apply wrist rotations using quaternions
+    glm::quat wristQuaternion = glm::angleAxis(glm::radians(wristYaw), glm::vec3(0.0f, 1.0f, 0.0f)) *
+                                glm::angleAxis(glm::radians(wristPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
+                                glm::angleAxis(glm::radians(wristRoll), glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 wristRotation = glm::toMat4(wristQuaternion);
+
+    glMultMatrixf(glm::value_ptr(wristRotation));
+
+    // Wrist joint
+    glColor3f(0.0f, 1.0f, 0.0f);
+    drawJoint(0.15f);
+
+    glPushMatrix();
+    glTranslatef(0.0f, -0.1f, 0.0f);  // Adjust for half the cylinder length
+    glRotatef(90, 1.0f, 0.0f, 0.0f);  // Align cylinder along y-axis
+    glColor3f(0.0f, 0.0f, 1.0f);
+    drawLimb(0.2f, 0.05f);
     glPopMatrix();
 
     glPopMatrix();
 }
 
+void drawLeg(float translateX, float translateY, float translateZ)
+{
+    glPushMatrix();
+    glTranslatef(translateX, translateY, translateZ);
+    glRotatef(hipAngle, 1.0f, 0.0f, 0.0f);
+
+    // Hip joint
+    glColor3f(0.0f, 1.0f, 0.0f);
+    drawJoint(0.2f);
+
+    glPushMatrix();
+    glTranslatef(0.0f, -0.1f, 0.0f);  // Adjust for half the cylinder length
+    glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
+    glColor3f(0.0f, 0.0f, 1.0f);
+    drawLimb(0.35f, 0.2f);
+    glPopMatrix();
+
+    glTranslatef(0.0f, -0.55f, 0.0f);  // Move to the end of the first limb
+    glRotatef(kneeAngle, 1.0f, 0.0f, 0.0f);
+
+    // Knee joint
+    glColor3f(0.0f, 1.0f, 0.0f);
+    drawJoint(0.18f);
+
+    glPushMatrix();
+    glTranslatef(0.0f, 0.0f, 0.0f);  // Adjust for half the cylinder length
+    glColor3f(0.0f, 0.0f, 1.0f);
+    glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
+    drawLimb(0.35f, 0.16f);
+    glPopMatrix();
+
+    glPopMatrix();
+}
+
+void drawNeck()
+{
+    glTranslatef(0.0f, 1.125f, 0.0f);
+    drawJoint(0.25f);
+    
+}
+
+void drawRobot()
+{
+    glPushMatrix();
+    glTranslatef(robotX, robotY, robotZ);
+
+    // Draw legs
+    drawLeg(-0.25f, 0.0f, 0.0f); // Left leg, adjust y for ground
+    drawLeg(0.25f, 0.0f, 0.0f);  // Right leg, adjust y for ground
+
+    // Draw middle part
+    drawMiddlePart();
+
+    drawJoint(0.18f);
+
+    // Draw head
+    drawRobotHead(!useHeadCam);
+
+    // Draw right arm
+    drawRightArm();
+
+    drawNeck();
+
+    glPopMatrix();
+}
+
+void drawFloor()
+{
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, floorTexture);
+
+    // Set the material properties for a shiny floor
+    GLfloat specular[] = {1.0f, 1.0f, 1.0f, 1.0f};
+    GLfloat shininess = 100.0f;
+    glMaterialfv(GL_FRONT, GL_SPECULAR, specular);
+    glMaterialf(GL_FRONT, GL_SHININESS, shininess);
+
+    glPushMatrix();
+    glTranslatef(0.0f, -0.9f, 0.0f);
+    glScalef(10.0f, 0.1f, 10.0f);
+
+    // Render the tiled floor
+    glBegin(GL_QUADS);
+    glNormal3f(0.0f, 1.0f, 0.0f); // Normal pointing up
+    for (int i = -5; i < 5; ++i)
+    {
+        for (int j = -5; j < 5; ++j)
+        {
+            glTexCoord2f(0.0f, 0.0f);
+            glVertex3f(i, 0.0f, j);
+            glTexCoord2f(1.0f, 0.0f);
+            glVertex3f(i + 1, 0.0f, j);
+            glTexCoord2f(1.0f, 1.0f);
+            glVertex3f(i + 1, 0.0f, j + 1);
+            glTexCoord2f(0.0f, 1.0f);
+            glVertex3f(i, 0.0f, j + 1);
+        }
+    }
+    glEnd();
+
+    glPopMatrix();
+
+    glDisable(GL_TEXTURE_2D);
+}
+
+void renderScene()
+{
+    // Set up lighting
+    setupLighting();
+
+    // Render the floor
+    drawFloor();
+
+    // Render the robot
+    drawRobot();
+
+    // Render the light source as a box
+    drawLightBox();
+}
+
 void display()
 {
+    // Clear the default framebuffer
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
 
@@ -199,22 +389,8 @@ void display()
         gluLookAt(camX, camY, camZ, camX + sin(camYaw), camY + sin(camPitch), camZ - cos(camYaw), 0.0f, 1.0f, 0.0f);
     }
 
-    // Set up lighting
-    setupLighting();
-
-    // Render the floor
-    glPushMatrix();
-    glColor3f(0.5f, 0.5f, 0.5f);
-    glTranslatef(0.0f, -1.0f, 0.0f);
-    glScalef(10.0f, 0.1f, 10.0f);
-    glutSolidCube(1.0f);
-    glPopMatrix();
-
-    // Render the robot
-    drawRobot();
-
-    // Render the light source as a box
-    drawLightBox();
+    // Render the scene
+    renderScene();
 
     ImGui::NewFrame();
     // Render ImGui UI
@@ -239,12 +415,24 @@ void display()
     ImGui::Dummy(ImVec2(0.0f, 7.0f));
     ImGui::Text("Right-hand Angles");
     ImGui::PushFont(smallFont);
-    ImGui::Text("Shoulder");
-    ImGui::SliderFloat("##Shoulder Angle", &shoulderAngle, -90.0f, 90.0f);
-    ImGui::Text("Elbow");
-    ImGui::SliderFloat("##Elbow Angle", &elbowAngle, -90.0f, 90.0f);
-    ImGui::Text("Wrist");
-    ImGui::SliderFloat("##Wrist Angle", &wristAngle, -90.0f, 90.0f);
+    ImGui::Text("Shoulder Pitch");
+    ImGui::SliderFloat("##Shoulder Pitch", &shoulderPitch, -180.0f, 180.0f);
+    ImGui::Text("Shoulder Yaw");
+    ImGui::SliderFloat("##Shoulder Yaw", &shoulderYaw, -180.0f, 180.0f);
+    ImGui::Text("Shoulder Roll");
+    ImGui::SliderFloat("##Shoulder Roll", &shoulderRoll, -180.0f, 180.0f);
+    ImGui::Text("Elbow Pitch");
+    ImGui::SliderFloat("##Elbow Pitch", &elbowPitch, -180.0f, 180.0f);
+    ImGui::Text("Elbow Yaw");
+    ImGui::SliderFloat("##Elbow Yaw", &elbowYaw, -180.0f, 180.0f);
+    ImGui::Text("Elbow Roll");
+    ImGui::SliderFloat("##Elbow Roll", &elbowRoll, -180.0f, 180.0f);
+    ImGui::Text("Wrist Pitch");
+    ImGui::SliderFloat("##Wrist Pitch", &wristPitch, -180.0f, 180.0f);
+    ImGui::Text("Wrist Yaw");
+    ImGui::SliderFloat("##Wrist Yaw", &wristYaw, -180.0f, 180.0f);
+    ImGui::Text("Wrist Roll");
+    ImGui::SliderFloat("##Wrist Roll", &wristRoll, -180.0f, 180.0f);
     ImGui::PopFont();
 
     ImGui::Dummy(ImVec2(0.0f, 7.0f));
@@ -256,6 +444,15 @@ void display()
     ImGui::Text("Pitch");
     ImGui::SameLine();
     ImGui::SliderFloat("##Head Pitch", &headPitch, -35.0f, 15.0f);
+    ImGui::PopFont();
+
+    ImGui::Dummy(ImVec2(0.0f, 7.0f));
+    ImGui::Text("Leg Angles");
+    ImGui::PushFont(smallFont);
+    ImGui::Text("Hip");
+    ImGui::SliderFloat("##Hip Angle", &hipAngle, -90.0f, 90.0f);
+    ImGui::Text("Knee");
+    ImGui::SliderFloat("##Knee Angle", &kneeAngle, -90.0f, 90.0f);
     ImGui::PopFont();
 
     ImGui::Separator();
@@ -475,6 +672,8 @@ void init()
         std::cerr << "Failed to load font file!" << std::endl;
 #endif
     }
+
+    loadTextures();
 }
 
 void idle()
