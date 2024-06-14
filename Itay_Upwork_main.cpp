@@ -3,7 +3,6 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
-
 #include <GL/glew.h>
 #include <GL/freeglut.h>
 #include "imgui.h"
@@ -17,11 +16,12 @@
 
 // Global variables for robot parts transformations
 float robotX = 0.0f, robotY = 0.0f, robotZ = 0.0f;
+float robotRotation = 0.0f; // Rotation of the robot
 float shoulderPitch = 0.0f, shoulderYaw = 0.0f, shoulderRoll = 0.0f;
 float elbowPitch = 0.0f, elbowYaw = 0.0f, elbowRoll = 0.0f;
 float wristPitch = 0.0f, wristYaw = 0.0f, wristRoll = 0.0f;
 float headYaw = 0.0f, headPitch = 0.0f;
-float hipAngle = 0.0f, kneeAngle = 0.0f;
+float leftHipAngle = 0.0f, leftKneeAngle = 0.0f, rightHipAngle = 0.0f, rightKneeAngle = 0.0f;
 
 // Camera parameters
 float camX = 0.0f, camY = 5.0f, camZ = 15.0f; // Adjusted Z value for better view
@@ -52,6 +52,19 @@ ImFont *smallFont, *font;
 
 // Floor Texture
 GLuint floorTexture;
+
+// Animation parameters
+bool isMoving = false;
+float walkCycle = 0.0f;
+
+enum Direction
+{
+    FORWARD,
+    BACKWARD,
+    LEFT,
+    RIGHT
+};
+Direction currentDirection = FORWARD;
 
 void setupLighting()
 {
@@ -233,7 +246,7 @@ void drawRightArm()
     glPopMatrix();
 }
 
-void drawLeg(float translateX, float translateY, float translateZ)
+void drawLeg(float translateX, float translateY, float translateZ, float hipAngle, float kneeAngle)
 {
     glPushMatrix();
     glTranslatef(translateX, translateY, translateZ);
@@ -271,17 +284,17 @@ void drawNeck()
 {
     glTranslatef(0.0f, 1.125f, 0.0f);
     drawJoint(0.25f);
-    
 }
 
 void drawRobot()
 {
     glPushMatrix();
     glTranslatef(robotX, robotY, robotZ);
+    glRotatef(robotRotation, 0.0f, 1.0f, 0.0f);
 
     // Draw legs
-    drawLeg(-0.25f, 0.0f, 0.0f); // Left leg, adjust y for ground
-    drawLeg(0.25f, 0.0f, 0.0f);  // Right leg, adjust y for ground
+    drawLeg(-0.25f, 0.0f, 0.0f, leftHipAngle, leftKneeAngle); // Left leg
+    drawLeg(0.25f, 0.0f, 0.0f, rightHipAngle, rightKneeAngle); // Right leg
 
     // Draw middle part
     drawMiddlePart();
@@ -386,7 +399,7 @@ void display()
     else
     {
         // Use the main camera
-        gluLookAt(camX, camY, camZ, camX + sin(camYaw), camY + sin(camPitch), camZ - cos(camYaw), 0.0f, 1.0f, 0.0f);
+        gluLookAt(camX, camY, camZ, camX + sin(glm::radians(camYaw)), camY + sin(glm::radians(camPitch)), camZ - cos(glm::radians(camYaw)), 0.0f, 1.0f, 0.0f);
     }
 
     // Render the scene
@@ -450,9 +463,13 @@ void display()
     ImGui::Text("Leg Angles");
     ImGui::PushFont(smallFont);
     ImGui::Text("Hip");
-    ImGui::SliderFloat("##Hip Angle", &hipAngle, -90.0f, 90.0f);
+    ImGui::SliderFloat("##Hip Angle", &leftHipAngle, -90.0f, 90.0f);
     ImGui::Text("Knee");
-    ImGui::SliderFloat("##Knee Angle", &kneeAngle, -90.0f, 90.0f);
+    ImGui::SliderFloat("##Knee Angle", &leftKneeAngle, -90.0f, 90.0f);
+    ImGui::Text("Right Hip");
+    ImGui::SliderFloat("##Right Hip Angle", &rightHipAngle, -90.0f, 90.0f);
+    ImGui::Text("Right Knee");
+    ImGui::SliderFloat("##Right Knee Angle", &rightKneeAngle, -90.0f, 90.0f);
     ImGui::PopFont();
 
     ImGui::Separator();
@@ -548,8 +565,8 @@ void display()
         ImGui::Text("Controls:");
         ImGui::BulletText("W: Move Forward");
         ImGui::BulletText("S: Move Backward");
-        ImGui::BulletText("A: Move Left");
-        ImGui::BulletText("D: Move Right");
+        ImGui::BulletText("A: Turn Left");
+        ImGui::BulletText("D: Turn Right");
         ImGui::BulletText("Use mouse to control the robot's head");
         ImGui::BulletText("Use the sliders to adjust robot parts and camera");
         ImGui::End();
@@ -574,17 +591,97 @@ void reshape(int width, int height)
 
 void keyboard(unsigned char key, int x, int y)
 {
-    if (!useHeadCam)
+    isMoving = true;
+
+    if (key == 'w')
     {
-        if (key == 'w')
+        switch (currentDirection)
+        {
+        case FORWARD:
             robotZ -= 0.1f;
-        if (key == 's')
-            robotZ += 0.1f;
-        if (key == 'a')
-            robotX -= 0.1f;
-        if (key == 'd')
-            robotX += 0.1f;
+            break;
+        case BACKWARD:
+            robotRotation += 180.0f;
+            currentDirection = FORWARD;
+            break;
+        case LEFT:
+            robotRotation -= 90.0f;
+            currentDirection = FORWARD;
+            break;
+        case RIGHT:
+            robotRotation += 90.0f;
+            currentDirection = FORWARD;
+            break;
+        }
+        walkCycle += 0.1f;
     }
+    if (key == 's')
+    {
+        switch (currentDirection)
+        {
+        case FORWARD:
+            robotRotation += 180.0f;
+            currentDirection = BACKWARD;
+            break;
+        case BACKWARD:
+            robotZ += 0.1f;
+            break;
+        case LEFT:
+            robotRotation -= 90.0f;
+            currentDirection = BACKWARD;
+            break;
+        case RIGHT:
+            robotRotation += 90.0f;
+            currentDirection = BACKWARD;
+            break;
+        }
+        walkCycle -= 0.1f;
+    }
+    if (key == 'a')
+    {
+        switch (currentDirection)
+        {
+        case FORWARD:
+            robotRotation -= 90.0f;
+            currentDirection = LEFT;
+            break;
+        case BACKWARD:
+            robotRotation += 90.0f;
+            currentDirection = LEFT;
+            break;
+        case LEFT:
+            robotX -= 0.1f;
+            break;
+        case RIGHT:
+            robotRotation += 180.0f;
+            currentDirection = LEFT;
+            break;
+        }
+        walkCycle += 0.1f;
+    }
+    if (key == 'd')
+    {
+        switch (currentDirection)
+        {
+        case FORWARD:
+            robotRotation += 90.0f;
+            currentDirection = RIGHT;
+            break;
+        case BACKWARD:
+            robotRotation -= 90.0f;
+            currentDirection = RIGHT;
+            break;
+        case LEFT:
+            robotRotation += 180.0f;
+            currentDirection = RIGHT;
+            break;
+        case RIGHT:
+            robotX += 0.1f;
+            break;
+        }
+        walkCycle += 0.1f;
+    }
+
     glutPostRedisplay();
 }
 
@@ -642,6 +739,26 @@ void mouseMotion(int x, int y)
     glutPostRedisplay();
 }
 
+void updateAnimation()
+{
+    if (isMoving)
+    {
+        leftHipAngle = 30.0f * sin(walkCycle);
+        leftKneeAngle = 30.0f * sin(walkCycle + glm::pi<float>() / 2);
+        rightHipAngle = 30.0f * sin(walkCycle + glm::pi<float>());
+        rightKneeAngle = 30.0f * sin(walkCycle + 3 * glm::pi<float>() / 2);
+    }
+    else
+    {
+        leftHipAngle = 0.0f;
+        leftKneeAngle = 0.0f;
+        rightHipAngle = 0.0f;
+        rightKneeAngle = 0.0f;
+    }
+
+    glutPostRedisplay();
+}
+
 void init()
 {
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -678,7 +795,7 @@ void init()
 
 void idle()
 {
-    glutPostRedisplay();
+    updateAnimation();
 }
 
 int main(int argc, char **argv)
