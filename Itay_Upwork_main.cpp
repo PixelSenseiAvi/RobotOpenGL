@@ -1,14 +1,18 @@
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
+
 #include <GL/glew.h>
 #include <GL/freeglut.h>
 #include "imgui.h"
 #include "imgui_impl_glut.h"
 #include "imgui_impl_opengl2.h"
-#include <SOIL/SOIL.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 #ifdef DEBUG
 #include <iostream>
@@ -21,7 +25,8 @@ float shoulderPitch = 0.0f, shoulderYaw = 0.0f, shoulderRoll = 0.0f;
 float elbowPitch = 0.0f, elbowYaw = 0.0f, elbowRoll = 0.0f;
 float wristPitch = 0.0f, wristYaw = 0.0f, wristRoll = 0.0f;
 float headYaw = 0.0f, headPitch = 0.0f;
-float leftHipAngle = 0.0f, leftKneeAngle = 0.0f, rightHipAngle = 0.0f, rightKneeAngle = 0.0f;
+float leftHipAngle = 0.0f, leftKneeAngle = 0.0f;
+float rightHipAngle = 0.0f, rightKneeAngle = 0.0f;
 
 // Camera parameters
 float camX = 0.0f, camY = 5.0f, camZ = 15.0f; // Adjusted Z value for better view
@@ -38,7 +43,7 @@ float headCamYaw = 0.0f, headCamPitch = 0.0f;
 bool useHeadCam = false; // Boolean flag to switch cameras
 
 // Lighting parameters
-float lightPos[] = {1.2f, 2.5f, 2.0f, 1.0f};
+float lightPos[] = { 1.2f, 2.5f, 2.0f, 1.0f };
 float ambientStrength = 0.1f;
 float pointLightIntensity = 1.0f;
 
@@ -48,14 +53,24 @@ int windowHeight = 720;
 
 bool show_help_window = false; // Variable to control the display of the help window
 
-ImFont *smallFont, *font;
+ImFont* smallFont, * font;
 
-// Floor Texture
-GLuint floorTexture;
+// Textures
+GLuint floorTexture, metalTexture, cubeTexture;
 
 // Animation parameters
 bool isMoving = false;
 float walkCycle = 0.0f;
+
+// Material properties
+GLfloat floorSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+GLfloat floorShininess = 100.0f;
+
+GLfloat metalSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+GLfloat metalShininess = 128.0f;
+
+GLfloat cubeSpecular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
+GLfloat cubeShininess = 64.0f;
 
 enum Direction
 {
@@ -71,9 +86,9 @@ void setupLighting()
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
 
-    GLfloat ambientLight[] = {ambientStrength, ambientStrength, ambientStrength, 1.0f};
-    GLfloat diffuseLight[] = {pointLightIntensity, pointLightIntensity, pointLightIntensity, 1.0f};
-    GLfloat specularLight[] = {1.0f, 1.0f, 1.0f, 1.0f};
+    GLfloat ambientLight[] = { ambientStrength, ambientStrength, ambientStrength, 1.0f };
+    GLfloat diffuseLight[] = { pointLightIntensity, pointLightIntensity, pointLightIntensity, 1.0f };
+    GLfloat specularLight[] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
     glLightfv(GL_LIGHT0, GL_AMBIENT, ambientLight);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuseLight);
@@ -81,13 +96,55 @@ void setupLighting()
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
 }
 
+bool loadTexture(const char* filepath, GLuint& textureID)
+{
+    int width, height, channels;
+    unsigned char* data = stbi_load(filepath, &width, &height, &channels, 0);
+    if (data)
+    {
+        glGenTextures(1, &textureID);
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, channels == 3 ? GL_RGB : GL_RGBA, width, height, 0, channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        // Set texture parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+        return true;
+    }
+    else
+    {
+#ifdef DEBUG
+        std::cerr << "Failed to load texture: " << filepath << std::endl;
+#endif
+        return false;
+    }
+}
+
 void loadTextures()
 {
-    floorTexture = SOIL_load_OGL_texture("../Assets/tiles_0006_color_1k.jpg", SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y);
-    if (floorTexture == 0)
+    if (!loadTexture("Assets/tiles_0006_color_1k.jpg", floorTexture))
     {
 #ifdef DEBUG
         std::cerr << "Failed to load floor texture!" << std::endl;
+#endif
+    }
+
+    if (!loadTexture("Assets/metal.jpg", metalTexture))
+    {
+#ifdef DEBUG
+        std::cerr << "Failed to load metal texture!" << std::endl;
+#endif
+    }
+
+    if (!loadTexture("Assets/canvas.jpg", cubeTexture))
+    {
+#ifdef DEBUG
+        std::cerr << "Failed to load cube texture!" << std::endl;
 #endif
     }
 }
@@ -106,10 +163,10 @@ void drawLightBox()
     glGetMaterialfv(GL_FRONT, GL_EMISSION, prevEmission);
 
     // Set material properties for the light box
-    GLfloat yellow[] = {1.0f, 1.0f, 0.0f, 1.0f};
-    GLfloat brightYellow[] = {1.0f, 1.0f, 0.0f, 1.0f};
-    GLfloat white[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    GLfloat emission[] = {0.5f, 0.5f, 0.0f, 1.0f}; // Higher emissive property for brightness
+    GLfloat yellow[] = { 1.0f, 1.0f, 0.0f, 1.0f };
+    GLfloat brightYellow[] = { 1.0f, 1.0f, 0.0f, 1.0f };
+    GLfloat white[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    GLfloat emission[] = { 0.5f, 0.5f, 0.0f, 1.0f }; // Higher emissive property for brightness
 
     glMaterialfv(GL_FRONT, GL_AMBIENT, yellow);
     glMaterialfv(GL_FRONT, GL_DIFFUSE, brightYellow);
@@ -157,7 +214,7 @@ void drawRobotHead(bool visible)
 
 void drawLimb(float length, float radius)
 {
-    GLUquadric *quadric = gluNewQuadric();
+    GLUquadric* quadric = gluNewQuadric();
     gluCylinder(quadric, radius, radius, length, 20, 20);
     gluDeleteQuadric(quadric);
 }
@@ -184,8 +241,8 @@ void drawRightArm()
 
     // Apply shoulder rotations using quaternions
     glm::quat shoulderQuaternion = glm::angleAxis(glm::radians(shoulderYaw), glm::vec3(0.0f, 1.0f, 0.0f)) *
-                                   glm::angleAxis(glm::radians(shoulderPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
-                                   glm::angleAxis(glm::radians(shoulderRoll), glm::vec3(0.0f, 0.0f, 1.0f));
+        glm::angleAxis(glm::radians(shoulderPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
+        glm::angleAxis(glm::radians(shoulderRoll), glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 shoulderRotation = glm::toMat4(shoulderQuaternion);
 
     glMultMatrixf(glm::value_ptr(shoulderRotation));
@@ -205,8 +262,8 @@ void drawRightArm()
 
     // Apply elbow rotations using quaternions
     glm::quat elbowQuaternion = glm::angleAxis(glm::radians(elbowYaw), glm::vec3(0.0f, 1.0f, 0.0f)) *
-                                glm::angleAxis(glm::radians(elbowPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
-                                glm::angleAxis(glm::radians(elbowRoll), glm::vec3(0.0f, 0.0f, 1.0f));
+        glm::angleAxis(glm::radians(elbowPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
+        glm::angleAxis(glm::radians(elbowRoll), glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 elbowRotation = glm::toMat4(elbowQuaternion);
 
     glMultMatrixf(glm::value_ptr(elbowRotation));
@@ -226,8 +283,8 @@ void drawRightArm()
 
     // Apply wrist rotations using quaternions
     glm::quat wristQuaternion = glm::angleAxis(glm::radians(wristYaw), glm::vec3(0.0f, 1.0f, 0.0f)) *
-                                glm::angleAxis(glm::radians(wristPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
-                                glm::angleAxis(glm::radians(wristRoll), glm::vec3(0.0f, 0.0f, 1.0f));
+        glm::angleAxis(glm::radians(wristPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
+        glm::angleAxis(glm::radians(wristRoll), glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 wristRotation = glm::toMat4(wristQuaternion);
 
     glMultMatrixf(glm::value_ptr(wristRotation));
@@ -246,7 +303,7 @@ void drawRightArm()
     glPopMatrix();
 }
 
-void drawLeg(float translateX, float translateY, float translateZ, float hipAngle, float kneeAngle)
+void drawLeg(float hipAngle, float kneeAngle, float translateX, float translateY, float translateZ)
 {
     glPushMatrix();
     glTranslatef(translateX, translateY, translateZ);
@@ -293,8 +350,8 @@ void drawRobot()
     glRotatef(robotRotation, 0.0f, 1.0f, 0.0f);
 
     // Draw legs
-    drawLeg(-0.25f, 0.0f, 0.0f, leftHipAngle, leftKneeAngle); // Left leg
-    drawLeg(0.25f, 0.0f, 0.0f, rightHipAngle, rightKneeAngle); // Right leg
+    drawLeg(leftHipAngle, leftKneeAngle, -0.25f, 0.0f, 0.0f); // Left leg
+    drawLeg(rightHipAngle, rightKneeAngle, 0.25f, 0.0f, 0.0f); // Right leg
 
     // Draw middle part
     drawMiddlePart();
@@ -304,8 +361,9 @@ void drawRobot()
     // Draw head
     drawRobotHead(!useHeadCam);
 
-    // Draw right arm
+    // Draw arms
     drawRightArm();
+    //drawLeftArm();
 
     drawNeck();
 
@@ -318,10 +376,8 @@ void drawFloor()
     glBindTexture(GL_TEXTURE_2D, floorTexture);
 
     // Set the material properties for a shiny floor
-    GLfloat specular[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    GLfloat shininess = 100.0f;
-    glMaterialfv(GL_FRONT, GL_SPECULAR, specular);
-    glMaterialf(GL_FRONT, GL_SHININESS, shininess);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, floorSpecular);
+    glMaterialf(GL_FRONT, GL_SHININESS, floorShininess);
 
     glPushMatrix();
     glTranslatef(0.0f, -0.9f, 0.0f);
@@ -351,6 +407,57 @@ void drawFloor()
     glDisable(GL_TEXTURE_2D);
 }
 
+void drawMetalSphere()
+{
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, metalTexture);
+
+    // Set the material properties for a metallic sphere
+    glMaterialfv(GL_FRONT, GL_SPECULAR, metalSpecular);
+    glMaterialf(GL_FRONT, GL_SHININESS, metalShininess);
+
+    glPushMatrix();
+    glTranslatef(-2.0f, 1.0f, 0.0f);
+    glutSolidSphere(0.5f, 20, 20);
+    glPopMatrix();
+
+    glDisable(GL_TEXTURE_2D);
+}
+
+void drawTexturedCube()
+{
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, cubeTexture);
+
+    // Set the material properties for a cube
+    glMaterialfv(GL_FRONT, GL_SPECULAR, cubeSpecular);
+    glMaterialf(GL_FRONT, GL_SHININESS, cubeShininess);
+
+    glPushMatrix();
+    glTranslatef(2.0f, 1.0f, 0.0f);
+    glutSolidCube(1.0f);
+    glPopMatrix();
+
+    glDisable(GL_TEXTURE_2D);
+}
+
+void drawTexturedCone()
+{
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, cubeTexture);
+
+    // Set the material properties for a cone
+    glMaterialfv(GL_FRONT, GL_SPECULAR, cubeSpecular);
+    glMaterialf(GL_FRONT, GL_SHININESS, cubeShininess);
+
+    glPushMatrix();
+    glTranslatef(0.0f, 1.0f, -5.0f);
+    glutSolidCone(0.5f, 1.0f, 20, 20);
+    glPopMatrix();
+
+    glDisable(GL_TEXTURE_2D);
+}
+
 void renderScene()
 {
     // Set up lighting
@@ -364,6 +471,11 @@ void renderScene()
 
     // Render the light source as a box
     drawLightBox();
+
+    // Render additional objects
+    drawMetalSphere();
+    drawTexturedCube();
+    drawTexturedCone();
 }
 
 void display()
@@ -399,7 +511,7 @@ void display()
     else
     {
         // Use the main camera
-        gluLookAt(camX, camY, camZ, camX + sin(glm::radians(camYaw)), camY + sin(glm::radians(camPitch)), camZ - cos(glm::radians(camYaw)), 0.0f, 1.0f, 0.0f);
+        gluLookAt(camX, camY, camZ, camX + sin(camYaw), camY + sin(camPitch), camZ - cos(camYaw), 0.0f, 1.0f, 0.0f);
     }
 
     // Render the scene
@@ -463,12 +575,10 @@ void display()
     ImGui::Text("Leg Angles");
     ImGui::PushFont(smallFont);
     ImGui::Text("Hip");
-    ImGui::SliderFloat("##Hip Angle", &leftHipAngle, -90.0f, 90.0f);
-    ImGui::Text("Knee");
-    ImGui::SliderFloat("##Knee Angle", &leftKneeAngle, -90.0f, 90.0f);
-    ImGui::Text("Right Hip");
+    ImGui::SliderFloat("##Left Hip Angle", &leftHipAngle, -90.0f, 90.0f);
     ImGui::SliderFloat("##Right Hip Angle", &rightHipAngle, -90.0f, 90.0f);
-    ImGui::Text("Right Knee");
+    ImGui::Text("Knee");
+    ImGui::SliderFloat("##Left Knee Angle", &leftKneeAngle, -90.0f, 90.0f);
     ImGui::SliderFloat("##Right Knee Angle", &rightKneeAngle, -90.0f, 90.0f);
     ImGui::PopFont();
 
@@ -512,6 +622,30 @@ void display()
     ImGui::Text("Point Light Intensity");
     ImGui::PushFont(smallFont);
     ImGui::SliderFloat("##Point Light Intensity", &pointLightIntensity, 0.0f, 1.0f);
+    ImGui::PopFont();
+
+    ImGui::Separator();
+
+    ImGui::Text("Floor Material");
+    ImGui::PushFont(smallFont);
+    ImGui::ColorEdit3("Floor Specular", (float*)floorSpecular);
+    ImGui::SliderFloat("Floor Shininess", &floorShininess, 1.0f, 128.0f);
+    ImGui::PopFont();
+
+    ImGui::Separator();
+
+    ImGui::Text("Metal Sphere Material");
+    ImGui::PushFont(smallFont);
+    ImGui::ColorEdit3("Metal Specular", (float*)metalSpecular);
+    ImGui::SliderFloat("Metal Shininess", &metalShininess, 1.0f, 128.0f);
+    ImGui::PopFont();
+
+    ImGui::Separator();
+
+    ImGui::Text("Cube Material");
+    ImGui::PushFont(smallFont);
+    ImGui::ColorEdit3("Cube Specular", (float*)cubeSpecular);
+    ImGui::SliderFloat("Cube Shininess", &cubeShininess, 1.0f, 128.0f);
     ImGui::PopFont();
 
     ImGui::Separator();
@@ -584,7 +718,7 @@ void reshape(int width, int height)
     windowWidth = width;
     windowHeight = height;
     glViewport(0, 0, windowWidth, windowHeight);
-    ImGuiIO &io = ImGui::GetIO();
+    ImGuiIO& io = ImGui::GetIO();
     io.DisplaySize = ImVec2((float)width, (float)height);
     glutPostRedisplay();
 }
@@ -595,90 +729,86 @@ void keyboard(unsigned char key, int x, int y)
 
     if (key == 'w')
     {
-        switch (currentDirection)
+        if (currentDirection != FORWARD)
         {
-        case FORWARD:
-            robotZ -= 0.1f;
-            break;
-        case BACKWARD:
-            robotRotation += 180.0f;
+            switch (currentDirection)
+            {
+            case BACKWARD:
+                robotRotation += 180.0f;
+                break;
+            case LEFT:
+                robotRotation += 90.0f;
+                break;
+            case RIGHT:
+                robotRotation -= 90.0f;
+                break;
+            }
             currentDirection = FORWARD;
-            break;
-        case LEFT:
-            robotRotation -= 90.0f;
-            currentDirection = FORWARD;
-            break;
-        case RIGHT:
-            robotRotation += 90.0f;
-            currentDirection = FORWARD;
-            break;
         }
+        robotZ -= 0.1f;
         walkCycle += 0.1f;
     }
-    if (key == 's')
+    else if (key == 's')
     {
-        switch (currentDirection)
+        if (currentDirection != BACKWARD)
         {
-        case FORWARD:
-            robotRotation += 180.0f;
+            switch (currentDirection)
+            {
+            case FORWARD:
+                robotRotation += 180.0f;
+                break;
+            case LEFT:
+                robotRotation -= 90.0f;
+                break;
+            case RIGHT:
+                robotRotation += 90.0f;
+                break;
+            }
             currentDirection = BACKWARD;
-            break;
-        case BACKWARD:
-            robotZ += 0.1f;
-            break;
-        case LEFT:
-            robotRotation -= 90.0f;
-            currentDirection = BACKWARD;
-            break;
-        case RIGHT:
-            robotRotation += 90.0f;
-            currentDirection = BACKWARD;
-            break;
         }
+        robotZ += 0.1f;
         walkCycle -= 0.1f;
     }
-    if (key == 'a')
+    else if (key == 'a')
     {
-        switch (currentDirection)
+        if (currentDirection != LEFT)
         {
-        case FORWARD:
-            robotRotation -= 90.0f;
+            switch (currentDirection)
+            {
+            case FORWARD:
+                robotRotation -= 90.0f;
+                break;
+            case BACKWARD:
+                robotRotation += 90.0f;
+                break;
+            case RIGHT:
+                robotRotation += 180.0f;
+                break;
+            }
             currentDirection = LEFT;
-            break;
-        case BACKWARD:
-            robotRotation += 90.0f;
-            currentDirection = LEFT;
-            break;
-        case LEFT:
-            robotX -= 0.1f;
-            break;
-        case RIGHT:
-            robotRotation += 180.0f;
-            currentDirection = LEFT;
-            break;
         }
+        robotX -= 0.1f;
         walkCycle += 0.1f;
     }
-    if (key == 'd')
+    else if (key == 'd')
     {
-        switch (currentDirection)
+        if (currentDirection != RIGHT)
         {
-        case FORWARD:
-            robotRotation += 90.0f;
+            switch (currentDirection)
+            {
+            case FORWARD:
+                robotRotation += 90.0f;
+                break;
+            case BACKWARD:
+                robotRotation -= 90.0f;
+                break;
+            case LEFT:
+                robotRotation += 180.0f;
+                break;
+            }
             currentDirection = RIGHT;
-            break;
-        case BACKWARD:
-            robotRotation -= 90.0f;
-            currentDirection = RIGHT;
-            break;
-        case LEFT:
-            robotRotation += 180.0f;
-            currentDirection = RIGHT;
-            break;
-        case RIGHT:
-            robotX += 0.1f;
-            break;
         }
+        robotX += 0.1f;
         walkCycle += 0.1f;
     }
 
@@ -775,14 +905,14 @@ void init()
     ImGui::StyleColorsDark();
 
     // Increase DPI scaling for crisper UI
-    ImGuiIO &io = ImGui::GetIO();
+    ImGuiIO& io = ImGui::GetIO();
     (void)&io;
     io.FontGlobalScale = 1.5f;
     io.DisplaySize = ImVec2((float)windowWidth, (float)windowHeight); // Set initial display size
 
     // Load custom font
-    font = io.Fonts->AddFontFromFileTTF("../Assets/Roboto-Regular.ttf", 18.0f);
-    smallFont = io.Fonts->AddFontFromFileTTF("../Assets/Roboto-Regular.ttf", 12.0f);
+    font = io.Fonts->AddFontFromFileTTF("Assets/Roboto-Regular.ttf", 18.0f);
+    smallFont = io.Fonts->AddFontFromFileTTF("Assets/Roboto-Regular.ttf", 12.0f);
     if (font == NULL || smallFont == NULL)
     {
 #ifdef DEBUG
@@ -798,7 +928,7 @@ void idle()
     updateAnimation();
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
