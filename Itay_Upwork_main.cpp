@@ -21,9 +21,9 @@
 #include <iostream>
 #endif
 
-// Global variables for robot parts transformations
+// Robot parts transformations
 float robotX = 0.0f, robotY = 0.0f, robotZ = 0.0f;
-float robotRotation = 0.0f; // Rotation of the robot
+float robotRotation = 0.0f;
 float shoulderPitch = 0.0f, shoulderYaw = 0.0f, shoulderRoll = 0.0f;
 float elbowPitch = 0.0f, elbowYaw = 0.0f, elbowRoll = 0.0f;
 float wristPitch = 0.0f, wristYaw = 0.0f, wristRoll = 0.0f;
@@ -32,64 +32,57 @@ float leftHipAngle = 0.0f, leftKneeAngle = 0.0f;
 float rightHipAngle = 0.0f, rightKneeAngle = 0.0f;
 
 // Camera parameters
-float camX = 0.0f, camY = 5.0f, camZ = 15.0f; // Adjusted Z value for better view
+float camX = 0.0f, camY = 5.0f, camZ = 15.0f;
 float camPitch = 0.0f, camYaw = 0.0f;
 
-// Variables to save the main camera state
-float savedCamX, savedCamY, savedCamZ;
-float savedCamPitch, savedCamYaw;
-
-// Secondary camera parameters (inside robot head)
+// Secondary camera (inside robot head)
 float headCamX = 0.0f, headCamY = 0.75f, headCamZ = 0.0f;
 float headCamYaw = 0.0f, headCamPitch = 0.0f;
 
-bool useHeadCam = false; // Boolean flag to switch cameras
+bool useHeadCam = false;
 
 // Lighting parameters
 float lightPos[] = { 1.2f, 7.5f, 2.0f, 1.0f };
 float ambientStrength = 1.0f;
 float pointLightIntensity = 1.0f;
-float lightAngle = 0.0f; // Angle for rotating the light source
+float lightAngle = 0.0f;
 
-// Set initial window size
+// Window size
 int windowWidth = 1280;
 int windowHeight = 720;
 
-bool show_help_window = false; // Variable to control the display of the help window
+bool show_help_window = false;
 
 ImFont* smallFont, * font;
 
 // Textures
 GLuint floorTexture, cubeTexture;
-
-GLuint mAlbedoTexture, mAOTexture, mHeightTexture, metallicTexture, mNormalTexture, mRoughnessTexture;
+GLuint cubemapTexture;
 
 // Animation parameters
 bool isMoving = false;
 float walkCycle = 0.0f;
 
-GLuint cubemapTexture;
-
 // Material properties
 GLfloat floorSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
 GLfloat floorShininess = 100.0f;
 
-GLfloat cubeSpecular[] = { 1.0f, 1.0f, 0.0f, 1.0f }; // Yellow color
+GLfloat cubeDiffuse[] = { 0.6f, 0.2f, 0.3f , 1.0f };
+GLfloat cubeSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
 GLfloat cubeShininess = 64.0f;
 
-GLfloat plasticDiffuse[] = { 0.9f, 0.8f, 0.1f, 1.0f }; // Yellow color
+GLfloat plasticDiffuse[] = { 0.9f, 0.8f, 0.1f, 1.0f };
 GLfloat plasticSpecular[] = { 0.3f, 0.3f, 0.3f, 1.0f };
 GLfloat plasticShininess = 5.0f;
 
-// Teapot material properties
 GLfloat teapotDiffuse[] = { 0.804f, 0.498f, 0.196f, 1.0f };
 GLfloat teapotSpecular[] = { 0.8f, 0.6f, 0.4f, 1.0f };
-GLfloat teapotShininess = 76.8f;
+GLfloat teapotShininess = 110.0f;
 
-// Set the material properties for the robot
 GLfloat robotDiffuse[] = { 0.7f, 0.7f, 0.7f, 1.0f };
 GLfloat robotSpecular[] = { 0.9f, 0.9f, 0.9f, 1.0f };
 GLfloat robotShininess = 128.0f;
+
 enum Direction
 {
     FORWARD,
@@ -104,11 +97,9 @@ void setupLighting()
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
 
-    // Ambient light
     GLfloat ambientLight[] = { ambientStrength, ambientStrength, ambientStrength, 1.0f };
     glLightfv(GL_LIGHT0, GL_AMBIENT, ambientLight);
 
-    // Pure white diffuse light
     GLfloat diffuseLight[] = { 1.0f, 1.0f, 1.0f, 1.0f };
     GLfloat specularLight[] = { 1.0f, 1.0f, 1.0f, 1.0f };
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuseLight);
@@ -127,7 +118,6 @@ bool loadTexture(const char* filepath, GLuint& textureID)
         glTexImage2D(GL_TEXTURE_2D, 0, channels == 3 ? GL_RGB : GL_RGBA, width, height, 0, channels == 3 ? GL_RGB : GL_RGBA, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
 
-        // Set texture parameters
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -179,21 +169,9 @@ bool loadCubemapTexture(const std::vector<std::string>& faces, GLuint& textureID
 
 void loadTextures()
 {
-    if (!loadTexture("Assets/tiles_0006_color_1k.jpg", floorTexture))
-    {
-#ifdef DEBUG
-        std::cerr << "Failed to load floor texture!" << std::endl;
-#endif
-    }
+    loadTexture("Assets/tiles_0006_color_1k.jpg", floorTexture);
+    loadTexture("Assets/canvas.jpg", cubeTexture);
 
-    if (!loadTexture("Assets/canvas.jpg", cubeTexture))
-    {
-#ifdef DEBUG
-        std::cerr << "Failed to load cube texture!" << std::endl;
-#endif
-    }
-
-    // Load cubemap textures
     std::vector<std::string> faces
     {
         "Assets/field-skyboxes/right.bmp",
@@ -204,12 +182,7 @@ void loadTextures()
         "Assets/field-skyboxes/back.bmp"
     };
 
-    if (!loadCubemapTexture(faces, cubemapTexture))
-    {
-#ifdef DEBUG
-        std::cerr << "Failed to load cubemap texture!" << std::endl;
-#endif
-    }
+    loadCubemapTexture(faces, cubemapTexture);
 }
 
 void drawLightBox()
@@ -217,7 +190,6 @@ void drawLightBox()
     glPushMatrix();
     glTranslatef(lightPos[0], lightPos[1], lightPos[2]);
 
-    // Save the current material properties
     GLfloat prevAmbient[4], prevDiffuse[4], prevSpecular[4], prevShininess[1], prevEmission[4];
     glGetMaterialfv(GL_FRONT, GL_AMBIENT, prevAmbient);
     glGetMaterialfv(GL_FRONT, GL_DIFFUSE, prevDiffuse);
@@ -225,22 +197,19 @@ void drawLightBox()
     glGetMaterialfv(GL_FRONT, GL_SHININESS, prevShininess);
     glGetMaterialfv(GL_FRONT, GL_EMISSION, prevEmission);
 
-    // Set material properties for the light box
     GLfloat yellow[] = { 1.0f, 1.0f, 0.0f, 1.0f };
     GLfloat brightYellow[] = { 1.0f, 1.0f, 0.0f, 1.0f };
     GLfloat white[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    GLfloat emission[] = { 0.5f, 0.5f, 0.0f, 1.0f }; // Higher emissive property for brightness
+    GLfloat emission[] = { 0.5f, 0.5f, 0.0f, 1.0f };
 
     glMaterialfv(GL_FRONT, GL_AMBIENT, yellow);
     glMaterialfv(GL_FRONT, GL_DIFFUSE, brightYellow);
     glMaterialfv(GL_FRONT, GL_SPECULAR, white);
-    glMaterialf(GL_FRONT, GL_SHININESS, 50.0f);    // Increase shininess for a brighter appearance
-    glMaterialfv(GL_FRONT, GL_EMISSION, emission); // Set emissive property
+    glMaterialf(GL_FRONT, GL_SHININESS, 50.0f);
+    glMaterialfv(GL_FRONT, GL_EMISSION, emission);
 
-    // Draw the light box
     glutSolidCube(0.2f);
 
-    // Restore the previous material properties
     glMaterialfv(GL_FRONT, GL_AMBIENT, prevAmbient);
     glMaterialfv(GL_FRONT, GL_DIFFUSE, prevDiffuse);
     glMaterialfv(GL_FRONT, GL_SPECULAR, prevSpecular);
@@ -255,15 +224,13 @@ void drawRobotHead(bool visible)
     if (!visible)
         return;
 
-    // Draw head
     glPushMatrix();
-    glTranslatef(0.0f, 1.75f, 0.0f); // Move the head up
+    glTranslatef(0.0f, 1.75f, 0.0f);
     glRotatef(headYaw, 0.0f, 1.0f, 0.0f);
     glRotatef(headPitch, 1.0f, 0.0f, 0.0f);
     glColor3f(0.0f, 1.0f, 0.0f);
     glutSolidSphere(0.5f, 20, 20);
 
-    // Draw eyes
     glPushMatrix();
     glColor3f(1.0f, 1.0f, 1.0f);
     glTranslatef(0.2f, 0.1f, -0.45f);
@@ -302,7 +269,6 @@ void drawRightArm()
     glPushMatrix();
     glTranslatef(0.65f, 1.0f, 0.0f);
 
-    // Apply shoulder rotations using quaternions
     glm::quat shoulderQuaternion = glm::angleAxis(glm::radians(shoulderYaw), glm::vec3(0.0f, 1.0f, 0.0f)) *
         glm::angleAxis(glm::radians(shoulderPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
         glm::angleAxis(glm::radians(shoulderRoll), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -310,20 +276,18 @@ void drawRightArm()
 
     glMultMatrixf(glm::value_ptr(shoulderRotation));
 
-    // Shoulder joint
     glColor3f(0.0f, 1.0f, 0.0f);
     drawJoint(0.25f);
 
     glPushMatrix();
-    glTranslatef(0.0f, -0.25f, 0.0f);  // Adjust for half the cylinder length
-    glRotatef(90, 1.0f, 0.0f, 0.0f);  // Align cylinder along y-axis
+    glTranslatef(0.0f, -0.25f, 0.0f);
+    glRotatef(90, 1.0f, 0.0f, 0.0f);
     glColor3f(0.0f, 0.0f, 1.0f);
     drawLimb(0.25f, 0.1f);
     glPopMatrix();
 
-    glTranslatef(0.0f, -0.5f, 0.0f);  // Move to the end of the first limb
+    glTranslatef(0.0f, -0.5f, 0.0f);
 
-    // Apply elbow rotations using quaternions
     glm::quat elbowQuaternion = glm::angleAxis(glm::radians(elbowYaw), glm::vec3(0.0f, 1.0f, 0.0f)) *
         glm::angleAxis(glm::radians(elbowPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
         glm::angleAxis(glm::radians(elbowRoll), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -331,20 +295,18 @@ void drawRightArm()
 
     glMultMatrixf(glm::value_ptr(elbowRotation));
 
-    // Elbow joint
     glColor3f(0.0f, 1.0f, 0.0f);
     drawJoint(0.2f);
 
     glPushMatrix();
-    glTranslatef(0.0f, -0.25f, 0.0f);  // Adjust for half the cylinder length
-    glRotatef(90, 1.0f, 0.0f, 0.0f);  // Align cylinder along y-axis
+    glTranslatef(0.0f, -0.25f, 0.0f);
+    glRotatef(90, 1.0f, 0.0f, 0.0f);
     glColor3f(0.0f, 0.0f, 1.0f);
     drawLimb(0.25f, 0.1f);
     glPopMatrix();
 
-    glTranslatef(0.0f, -0.5f, 0.0f);  // Move to the end of the second limb
+    glTranslatef(0.0f, -0.5f, 0.0f);
 
-    // Apply wrist rotations using quaternions
     glm::quat wristQuaternion = glm::angleAxis(glm::radians(wristYaw), glm::vec3(0.0f, 1.0f, 0.0f)) *
         glm::angleAxis(glm::radians(wristPitch), glm::vec3(1.0f, 0.0f, 0.0f)) *
         glm::angleAxis(glm::radians(wristRoll), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -352,13 +314,12 @@ void drawRightArm()
 
     glMultMatrixf(glm::value_ptr(wristRotation));
 
-    // Wrist joint
     glColor3f(0.0f, 1.0f, 0.0f);
     drawJoint(0.15f);
 
     glPushMatrix();
-    glTranslatef(0.0f, -0.1f, 0.0f);  // Adjust for half the cylinder length
-    glRotatef(90, 1.0f, 0.0f, 0.0f);  // Align cylinder along y-axis
+    glTranslatef(0.0f, -0.1f, 0.0f);
+    glRotatef(90, 1.0f, 0.0f, 0.0f);
     glColor3f(0.0f, 0.0f, 1.0f);
     drawLimb(0.2f, 0.05f);
     glPopMatrix();
@@ -372,26 +333,24 @@ void drawLeg(float hipAngle, float kneeAngle, float translateX, float translateY
     glTranslatef(translateX, translateY, translateZ);
     glRotatef(hipAngle, 1.0f, 0.0f, 0.0f);
 
-    // Hip joint
     glColor3f(0.0f, 1.0f, 0.0f);
     drawJoint(0.2f);
 
     glPushMatrix();
-    glTranslatef(0.0f, -0.1f, 0.0f);  // Adjust for half the cylinder length
+    glTranslatef(0.0f, -0.1f, 0.0f);
     glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
     glColor3f(0.0f, 0.0f, 1.0f);
     drawLimb(0.35f, 0.2f);
     glPopMatrix();
 
-    glTranslatef(0.0f, -0.55f, 0.0f);  // Move to the end of the first limb
+    glTranslatef(0.0f, -0.55f, 0.0f);
     glRotatef(kneeAngle, 1.0f, 0.0f, 0.0f);
 
-    // Knee joint
     glColor3f(0.0f, 1.0f, 0.0f);
     drawJoint(0.18f);
 
     glPushMatrix();
-    glTranslatef(0.0f, 0.0f, 0.0f);  // Adjust for half the cylinder length
+    glTranslatef(0.0f, 0.0f, 0.0f);
     glColor3f(0.0f, 0.0f, 1.0f);
     glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
     drawLimb(0.35f, 0.16f);
@@ -416,21 +375,16 @@ void drawRobot()
     glTranslatef(robotX, robotY, robotZ);
     glRotatef(robotRotation, 0.0f, 1.0f, 0.0f);
 
-    // Draw legs
     drawLeg(leftHipAngle, leftKneeAngle, -0.25f, 0.0f, 0.0f); // Left leg
     drawLeg(rightHipAngle, rightKneeAngle, 0.25f, 0.0f, 0.0f); // Right leg
 
-    // Draw middle part
     drawMiddlePart();
 
     drawJoint(0.18f);
 
-    // Draw head
     drawRobotHead(!useHeadCam);
 
-    // Draw arms
     drawRightArm();
-    //drawLeftArm();
 
     drawNeck();
 
@@ -442,7 +396,6 @@ void drawFloor()
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, floorTexture);
 
-    // Set the material properties for a shiny floor
     glMaterialfv(GL_FRONT, GL_SPECULAR, floorSpecular);
     glMaterialf(GL_FRONT, GL_SHININESS, floorShininess);
 
@@ -450,9 +403,8 @@ void drawFloor()
     glTranslatef(0.0f, -0.9f, 0.0f);
     glScalef(10.0f, 0.1f, 10.0f);
 
-    // Render the tiled floor
     glBegin(GL_QUADS);
-    glNormal3f(0.0f, 1.0f, 0.0f); // Normal pointing up
+    glNormal3f(0.0f, 1.0f, 0.0f);
     for (int i = -5; i < 5; ++i)
     {
         for (int j = -5; j < 5; ++j)
@@ -488,11 +440,6 @@ void drawPlasticSphere()
 
 void drawTexturedCube()
 {
-    // Set the material properties for a yellow cube
-    GLfloat cubeDiffuse[] = { 1.0f, 1.0f, 0.0f, 1.0f }; // Yellow color
-    GLfloat cubeSpecular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
-    GLfloat cubeShininess = 64.0f;
-
     glMaterialfv(GL_FRONT, GL_DIFFUSE, cubeDiffuse);
     glMaterialfv(GL_FRONT, GL_SPECULAR, cubeSpecular);
     glMaterialf(GL_FRONT, GL_SHININESS, cubeShininess);
@@ -510,57 +457,49 @@ void drawTexturedCube()
 
 void drawMetalTeapot()
 {
-    // Set the material properties for a metallic teapot
     glMaterialfv(GL_FRONT, GL_SPECULAR, teapotSpecular);
     glMaterialfv(GL_FRONT, GL_DIFFUSE, teapotDiffuse);
     glMaterialf(GL_FRONT, GL_SHININESS, teapotShininess);
 
     glPushMatrix();
-    glTranslatef(-4.0f, 0.0f, -1.0f); // Position the teapot in the scene
+    glTranslatef(-4.0f, 0.0f, -1.0f);
     glutSolidTeapot(1.0);
     glPopMatrix();
 }
 
 void drawSkybox()
 {
-    glDepthFunc(GL_LEQUAL);  // Change depth function so depth test passes when values are equal to depth buffer's content
+    glDepthFunc(GL_LEQUAL);
     glEnable(GL_TEXTURE_CUBE_MAP);
     glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
 
-    // Draw each face of the skybox
     glBegin(GL_QUADS);
 
-    // Front face
     glTexCoord3f(-1.0f, 1.0f, -1.0f); glVertex3f(-50.0f, 50.0f, -50.0f);
     glTexCoord3f(-1.0f, -1.0f, -1.0f); glVertex3f(-50.0f, -50.0f, -50.0f);
     glTexCoord3f(1.0f, -1.0f, -1.0f); glVertex3f(50.0f, -50.0f, -50.0f);
     glTexCoord3f(1.0f, 1.0f, -1.0f); glVertex3f(50.0f, 50.0f, -50.0f);
 
-    // Back face
     glTexCoord3f(1.0f, 1.0f, 1.0f); glVertex3f(-50.0f, 50.0f, 50.0f);
     glTexCoord3f(1.0f, -1.0f, 1.0f); glVertex3f(-50.0f, -50.0f, 50.0f);
     glTexCoord3f(-1.0f, -1.0f, 1.0f); glVertex3f(50.0f, -50.0f, 50.0f);
     glTexCoord3f(-1.0f, 1.0f, 1.0f); glVertex3f(50.0f, 50.0f, 50.0f);
 
-    // Top face
     glTexCoord3f(-1.0f, 1.0f, 1.0f); glVertex3f(-50.0f, 50.0f, -50.0f);
     glTexCoord3f(1.0f, 1.0f, 1.0f); glVertex3f(50.0f, 50.0f, -50.0f);
     glTexCoord3f(1.0f, 1.0f, -1.0f); glVertex3f(50.0f, 50.0f, 50.0f);
     glTexCoord3f(-1.0f, 1.0f, -1.0f); glVertex3f(-50.0f, 50.0f, 50.0f);
 
-    // Bottom face
     glTexCoord3f(-1.0f, -1.0f, -1.0f); glVertex3f(-50.0f, -50.0f, -50.0f);
     glTexCoord3f(1.0f, -1.0f, -1.0f); glVertex3f(50.0f, -50.0f, -50.0f);
     glTexCoord3f(1.0f, -1.0f, 1.0f); glVertex3f(50.0f, -50.0f, 50.0f);
     glTexCoord3f(-1.0f, -1.0f, 1.0f); glVertex3f(-50.0f, -50.0f, 50.0f);
 
-    // Right face
     glTexCoord3f(1.0f, -1.0f, -1.0f); glVertex3f(50.0f, -50.0f, -50.0f);
     glTexCoord3f(1.0f, -1.0f, 1.0f); glVertex3f(50.0f, -50.0f, 50.0f);
     glTexCoord3f(1.0f, 1.0f, 1.0f); glVertex3f(50.0f, 50.0f, 50.0f);
     glTexCoord3f(1.0f, 1.0f, -1.0f); glVertex3f(50.0f, 50.0f, -50.0f);
 
-    // Left face
     glTexCoord3f(-1.0f, -1.0f, 1.0f); glVertex3f(-50.0f, -50.0f, 50.0f);
     glTexCoord3f(-1.0f, -1.0f, -1.0f); glVertex3f(-50.0f, -50.0f, -50.0f);
     glTexCoord3f(-1.0f, 1.0f, -1.0f); glVertex3f(-50.0f, 50.0f, -50.0f);
@@ -569,43 +508,30 @@ void drawSkybox()
     glEnd();
 
     glDisable(GL_TEXTURE_CUBE_MAP);
-    glDepthFunc(GL_LESS);  // Set depth function back to default
+    glDepthFunc(GL_LESS);
 }
 
 
 void renderScene()
 {
-    // Set up lighting
     setupLighting();
 
-    // Render the floor
     drawFloor();
-
-    // Render the robot
     drawRobot();
-
-    // Render the light source as a box
     drawLightBox();
-
-    // Render additional objects
     drawPlasticSphere();
     drawTexturedCube();
-
-    // Render the metallic teapot
     drawMetalTeapot();
 }
 
 void display()
 {
-    // Clear the default framebuffer
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
 
-    // Start the ImGui frame
     ImGui_ImplOpenGL2_NewFrame();
     ImGui_ImplGLUT_NewFrame();
 
-    // Set up the camera
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     gluPerspective(45.0f, (float)windowWidth / (float)windowHeight, 0.1f, 1000.0f);
@@ -615,7 +541,6 @@ void display()
 
     if (useHeadCam)
     {
-        // Use the secondary camera inside the robot's head
         float eyeX = robotX;
         float eyeY = robotY + headCamY;
         float eyeZ = robotZ + headCamZ;
@@ -627,27 +552,22 @@ void display()
     }
     else
     {
-        // Use the main camera
         gluLookAt(camX, camY, camZ, camX + sin(camYaw), camY + sin(camPitch), camZ - cos(camYaw), 0.0f, 1.0f, 0.0f);
     }
 
-    // Render the skybox before other objects
     glPushMatrix();
-    glTranslatef(camX, camY, camZ);  // Translate to the camera position
+    glTranslatef(camX, camY, camZ);
     drawSkybox();
     glPopMatrix();
 
-    // Render the scene
     renderScene();
 
     ImGui::NewFrame();
-    // Render ImGui UI
-    ImGui::SetNextWindowPos(ImVec2(windowWidth - 300, 0)); // Dock to the right
-    ImGui::SetNextWindowSize(ImVec2(300, windowHeight));   // Adjust width as needed
+    ImGui::SetNextWindowPos(ImVec2(windowWidth - 300, 0));
+    ImGui::SetNextWindowSize(ImVec2(300, windowHeight));
     ImGui::Begin("Robot Control", NULL, ImGuiWindowFlags_NoMove);
 
     ImGui::Text("Robot Position");
-
     ImGui::PushFont(smallFont);
     ImGui::Text("X");
     ImGui::SameLine();
@@ -778,7 +698,17 @@ void display()
     ImGui::SliderFloat("Shininess", &plasticShininess, 1.0f, 128.0f);
     ImGui::PopFont();
 
-    ImGui::Separator();
+    ImGui::Text("Teapot Material");
+    ImGui::PushFont(smallFont);
+    ImGui::ColorEdit3("Teapot Specular", teapotSpecular);
+    ImGui::SliderFloat("Teapot Shininess", &teapotShininess, 1.0f, 128.0f);
+    ImGui::PopFont();
+
+    ImGui::Text("Robot Material");
+    ImGui::PushFont(smallFont);
+    ImGui::ColorEdit3("Robot Specular", robotSpecular);
+    ImGui::SliderFloat("Robot Shininess", &robotShininess, 1.0f, 128.0f);
+    ImGui::PopFont();
 
     ImGui::Text("Cube Material");
     ImGui::PushFont(smallFont);
@@ -788,49 +718,12 @@ void display()
 
     ImGui::Separator();
 
-    ImGui::Text("Teapot Material");
-    ImGui::PushFont(smallFont);
-    ImGui::ColorEdit3("Teapot Specular", teapotSpecular);
-    ImGui::SliderFloat("Teapot Shininess", &teapotShininess, 1.0f, 128.0f);
-    ImGui::PopFont();
-
-    ImGui::Separator();
-
-    ImGui::Text("Robot Material");
-    ImGui::PushFont(smallFont);
-    ImGui::ColorEdit3("Robot Specular", robotSpecular);
-    ImGui::SliderFloat("Robot Shininess", &robotShininess, 1.0f, 128.0f);
-    ImGui::PopFont();
-
-    ImGui::Separator();
-
     if (ImGui::Checkbox("Use Head Camera", &useHeadCam))
     {
         // Save or restore the camera state when switching
         if (useHeadCam)
         {
-            // Save the current camera state
-            savedCamX = camX;
-            savedCamY = camY;
-            savedCamZ = camZ;
-            savedCamPitch = camPitch;
-            savedCamYaw = camYaw;
-
-            // Reset robot movement
             robotX = robotY = robotZ = 0.0f;
-        }
-        else
-        {
-            // Restore the saved camera state
-            camX = savedCamX;
-            camY = savedCamY;
-            camZ = savedCamZ;
-            camPitch = savedCamPitch;
-            camYaw = savedCamYaw;
-
-            // Ensure the head is looking at the same direction as the secondary camera
-            headYaw = headCamYaw;
-            headPitch = headCamPitch;
         }
     }
 
@@ -997,7 +890,6 @@ void mouseMotion(int x, int y)
         headCamYaw += xoffset;
         headCamPitch += yoffset;
 
-        // Enforce yaw and pitch limits for the head camera
         if (headCamYaw > 60.0f)
             headCamYaw = 60.0f;
         if (headCamYaw < -60.0f)
@@ -1012,7 +904,6 @@ void mouseMotion(int x, int y)
         headYaw += xoffset;
         headPitch += yoffset;
 
-        // Enforce yaw and pitch limits for the head
         if (headYaw > 60.0f)
             headYaw = 60.0f;
         if (headYaw < -60.0f)
@@ -1051,23 +942,19 @@ void init()
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glEnable(GL_DEPTH_TEST);
 
-    // Initialize ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui_ImplGLUT_Init();
     ImGui_ImplGLUT_InstallFuncs();
     ImGui_ImplOpenGL2_Init();
 
-    // Set up ImGui style
     ImGui::StyleColorsDark();
 
-    // Increase DPI scaling for crisper UI
     ImGuiIO& io = ImGui::GetIO();
     (void)&io;
     io.FontGlobalScale = 1.5f;
-    io.DisplaySize = ImVec2((float)windowWidth, (float)windowHeight); // Set initial display size
+    io.DisplaySize = ImVec2((float)windowWidth, (float)windowHeight);
 
-    // Load custom font
     font = io.Fonts->AddFontFromFileTTF("Assets/Roboto-Regular.ttf", 18.0f);
     smallFont = io.Fonts->AddFontFromFileTTF("Assets/Roboto-Regular.ttf", 12.0f);
     if (font == NULL || smallFont == NULL)
@@ -1079,28 +966,25 @@ void init()
 
     loadTextures();
 
-    // Configure texture units
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_TEXTURE_2D);
 
-    glActiveTexture(GL_TEXTURE0); // Reset to default texture unit
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void idle()
 {
     updateAnimation();
 
-    // Calculate light position based on angle
-    float radiusX = 70.0f; // Range for X-axis
-    float radiusY = 70.0f; // Range for Y-axis
-    float radiusZ = 20.0f; // Range for Z-axis (optional)
+    float radiusX = 70.0f;
+    float radiusY = 70.0f;
+    float radiusZ = 20.0f;
 
     lightPos[0] = radiusX * cos(glm::radians(lightAngle));
     lightPos[1] = radiusY * sin(glm::radians(lightAngle));
-    lightPos[2] = radiusZ * sin(glm::radians(lightAngle)); // Optional Z-axis movement
+    lightPos[2] = radiusZ * sin(glm::radians(lightAngle));
 
-    // Increment the angle to rotate the light
-    lightAngle += 0.5f; // Adjust the speed of rotation as needed
+    lightAngle += 0.5f;
     if (lightAngle >= 360.0f)
     {
         lightAngle -= 360.0f;
@@ -1122,7 +1006,7 @@ int main(int argc, char** argv)
     glutDisplayFunc(display);
     glutKeyboardFunc(keyboard);
     glutPassiveMotionFunc(mouseMotion);
-    glutReshapeFunc(reshape); // Add reshape callback
+    glutReshapeFunc(reshape);
     glutIdleFunc(idle);
 
     glutMainLoop();
