@@ -47,8 +47,9 @@ bool useHeadCam = false; // Boolean flag to switch cameras
 
 // Lighting parameters
 float lightPos[] = { 1.2f, 7.5f, 2.0f, 1.0f };
-float ambientStrength = 0.5f;
+float ambientStrength = 1.0f;
 float pointLightIntensity = 1.0f;
+float lightAngle = 0.0f; // Angle for rotating the light source
 
 // Set initial window size
 int windowWidth = 1280;
@@ -111,8 +112,8 @@ void setupLighting()
     GLfloat ambientLight[] = { ambientStrength, ambientStrength, ambientStrength, 1.0f };
     glLightfv(GL_LIGHT0, GL_AMBIENT, ambientLight);
 
-    // Point light
-    GLfloat diffuseLight[] = { pointLightIntensity, pointLightIntensity, pointLightIntensity, 1.0f };
+    // Pure white diffuse light
+    GLfloat diffuseLight[] = { 1.0f, 1.0f, 1.0f, 1.0f };
     GLfloat specularLight[] = { 1.0f, 1.0f, 1.0f, 1.0f };
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuseLight);
     glLightfv(GL_LIGHT0, GL_SPECULAR, specularLight);
@@ -269,7 +270,7 @@ void drawRobotHead(bool visible)
     // Draw eyes
     glPushMatrix();
     glColor3f(1.0f, 1.0f, 1.0f);
-    glTranslatef(0.2f, 0.1f, 0.45f);
+    glTranslatef(0.2f, 0.1f, -0.45f);
     glutSolidSphere(0.1f, 20, 20);
     glTranslatef(-0.4f, 0.0f, 0.0f);
     glutSolidSphere(0.1f, 20, 20);
@@ -575,6 +576,7 @@ void drawSkybox()
     glDepthFunc(GL_LESS);  // Set depth function back to default
 }
 
+
 void renderScene()
 {
     // Set up lighting
@@ -747,6 +749,10 @@ void display()
     ImGui::Text("W");
     ImGui::SameLine();
     ImGui::SliderFloat("##Light Position W", &lightPos[3], -10.0f, 10.0f);
+
+    ImGui::Text("Light Angle");
+    ImGui::SameLine();
+    ImGui::SliderFloat("##Light Angle", &lightAngle, 0.0f, 360.0f);
     ImGui::PopFont();
 
     ImGui::Dummy(ImVec2(0.0f, 7.0f));
@@ -891,10 +897,10 @@ void keyboard(unsigned char key, int x, int y)
                 robotRotation += 180.0f;
                 break;
             case LEFT:
-                robotRotation += 90.0f;
+                robotRotation -= 90.0f;
                 break;
             case RIGHT:
-                robotRotation -= 90.0f;
+                robotRotation += 90.0f;
                 break;
             }
             currentDirection = FORWARD;
@@ -909,13 +915,13 @@ void keyboard(unsigned char key, int x, int y)
             switch (currentDirection)
             {
             case FORWARD:
-                robotRotation += 180.0f;
+                robotRotation -= 180.0f;
                 break;
             case LEFT:
-                robotRotation -= 90.0f;
+                robotRotation += 90.0f;
                 break;
             case RIGHT:
-                robotRotation += 90.0f;
+                robotRotation -= 90.0f;
                 break;
             }
             currentDirection = BACKWARD;
@@ -930,13 +936,13 @@ void keyboard(unsigned char key, int x, int y)
             switch (currentDirection)
             {
             case FORWARD:
-                robotRotation -= 90.0f;
-                break;
-            case BACKWARD:
                 robotRotation += 90.0f;
                 break;
+            case BACKWARD:
+                robotRotation -= 90.0f;
+                break;
             case RIGHT:
-                robotRotation += 180.0f;
+                robotRotation -= 180.0f;
                 break;
             }
             currentDirection = LEFT;
@@ -951,13 +957,13 @@ void keyboard(unsigned char key, int x, int y)
             switch (currentDirection)
             {
             case FORWARD:
-                robotRotation += 90.0f;
-                break;
-            case BACKWARD:
                 robotRotation -= 90.0f;
                 break;
+            case BACKWARD:
+                robotRotation += 90.0f;
+                break;
             case LEFT:
-                robotRotation += 180.0f;
+                robotRotation -= 180.0f;
                 break;
             }
             currentDirection = RIGHT;
@@ -968,6 +974,7 @@ void keyboard(unsigned char key, int x, int y)
 
     glutPostRedisplay();
 }
+
 
 void mouseMotion(int x, int y)
 {
@@ -1101,6 +1108,24 @@ void init()
 void idle()
 {
     updateAnimation();
+
+    // Calculate light position based on angle
+    float radiusX = 70.0f; // Range for X-axis
+    float radiusY = 70.0f; // Range for Y-axis
+    float radiusZ = 20.0f; // Range for Z-axis (optional)
+
+    lightPos[0] = radiusX * cos(glm::radians(lightAngle));
+    lightPos[1] = radiusY * sin(glm::radians(lightAngle));
+    lightPos[2] = radiusZ * sin(glm::radians(lightAngle)); // Optional Z-axis movement
+
+    // Increment the angle to rotate the light
+    lightAngle += 0.5f; // Adjust the speed of rotation as needed
+    if (lightAngle >= 360.0f)
+    {
+        lightAngle -= 360.0f;
+    }
+
+    glutPostRedisplay();
 }
 
 int main(int argc, char** argv)
