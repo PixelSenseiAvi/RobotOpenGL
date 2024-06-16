@@ -1,10 +1,3 @@
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <glm/gtx/quaternion.hpp>
-
 #include <GL/glew.h>
 #include <GL/freeglut.h>
 #include "imgui.h"
@@ -13,6 +6,16 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
+
+#include <vector>
+#include <string>
 
 #ifdef DEBUG
 #include <iostream>
@@ -43,8 +46,8 @@ float headCamYaw = 0.0f, headCamPitch = 0.0f;
 bool useHeadCam = false; // Boolean flag to switch cameras
 
 // Lighting parameters
-float lightPos[] = { 1.2f, 2.5f, 2.0f, 1.0f };
-float ambientStrength = 0.1f;
+float lightPos[] = { 1.2f, 7.5f, 2.0f, 1.0f };
+float ambientStrength = 0.5f;
 float pointLightIntensity = 1.0f;
 
 // Set initial window size
@@ -56,11 +59,15 @@ bool show_help_window = false; // Variable to control the display of the help wi
 ImFont* smallFont, * font;
 
 // Textures
-GLuint floorTexture, metalTexture, cubeTexture;
+GLuint floorTexture, cubeTexture;
+
+GLuint mAlbedoTexture, mAOTexture, mHeightTexture, metallicTexture, mNormalTexture, mRoughnessTexture;
 
 // Animation parameters
 bool isMoving = false;
 float walkCycle = 0.0f;
+
+GLuint cubemapTexture;
 
 // Material properties
 GLfloat floorSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -69,8 +76,22 @@ GLfloat floorShininess = 100.0f;
 GLfloat metalSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
 GLfloat metalShininess = 128.0f;
 
-GLfloat cubeSpecular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
+GLfloat cubeSpecular[] = { 1.0f, 1.0f, 0.0f, 1.0f }; // Yellow color
 GLfloat cubeShininess = 64.0f;
+
+GLfloat plasticDiffuse[] = { 0.9f, 0.8f, 0.1f, 1.0f }; // Yellow color
+GLfloat plasticSpecular[] = { 0.3f, 0.3f, 0.3f, 1.0f };
+GLfloat plasticShininess = 5.0f;
+
+// Teapot material properties
+GLfloat teapotDiffuse[] = { 0.0f, 0.5f, 1.0f, 1.0f }; // Blue color
+GLfloat teapotSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+GLfloat teapotShininess = 120.0f;
+
+// Set the material properties for the robot
+GLfloat robotDiffuse[] = { 0.5f, 0.8f, 0.4f, 1.0f };
+GLfloat robotSpecular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
+GLfloat robotShininess = 100.0f;
 
 enum Direction
 {
@@ -86,11 +107,13 @@ void setupLighting()
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
 
+    // Ambient light
     GLfloat ambientLight[] = { ambientStrength, ambientStrength, ambientStrength, 1.0f };
+    glLightfv(GL_LIGHT0, GL_AMBIENT, ambientLight);
+
+    // Point light
     GLfloat diffuseLight[] = { pointLightIntensity, pointLightIntensity, pointLightIntensity, 1.0f };
     GLfloat specularLight[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-
-    glLightfv(GL_LIGHT0, GL_AMBIENT, ambientLight);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuseLight);
     glLightfv(GL_LIGHT0, GL_SPECULAR, specularLight);
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
@@ -125,6 +148,38 @@ bool loadTexture(const char* filepath, GLuint& textureID)
     }
 }
 
+bool loadCubemapTexture(const std::vector<std::string>& faces, GLuint& textureID)
+{
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+    int width, height, channels;
+    for (unsigned int i = 0; i < faces.size(); i++)
+    {
+        unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &channels, 0);
+        if (data)
+        {
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+            stbi_image_free(data);
+        }
+        else
+        {
+#ifdef DEBUG
+            std::cerr << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
+#endif
+            stbi_image_free(data);
+            return false;
+        }
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    return true;
+}
+
 void loadTextures()
 {
     if (!loadTexture("Assets/tiles_0006_color_1k.jpg", floorTexture))
@@ -134,17 +189,28 @@ void loadTextures()
 #endif
     }
 
-    if (!loadTexture("Assets/metal.jpg", metalTexture))
-    {
-#ifdef DEBUG
-        std::cerr << "Failed to load metal texture!" << std::endl;
-#endif
-    }
-
     if (!loadTexture("Assets/canvas.jpg", cubeTexture))
     {
 #ifdef DEBUG
         std::cerr << "Failed to load cube texture!" << std::endl;
+#endif
+    }
+
+    // Load cubemap textures
+    std::vector<std::string> faces
+    {
+        "Assets/field-skyboxes/right.bmp",
+        "Assets/field-skyboxes/left.bmp",
+        "Assets/field-skyboxes/top.bmp",
+        "Assets/field-skyboxes/bottom.bmp",
+        "Assets/field-skyboxes/front.bmp",
+        "Assets/field-skyboxes/back.bmp"
+    };
+
+    if (!loadCubemapTexture(faces, cubemapTexture))
+    {
+#ifdef DEBUG
+        std::cerr << "Failed to load cubemap texture!" << std::endl;
 #endif
     }
 }
@@ -345,6 +411,10 @@ void drawNeck()
 
 void drawRobot()
 {
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, robotDiffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, robotSpecular);
+    glMaterialf(GL_FRONT, GL_SHININESS, robotShininess);
+
     glPushMatrix();
     glTranslatef(robotX, robotY, robotZ);
     glRotatef(robotRotation, 0.0f, 1.0f, 0.0f);
@@ -407,55 +477,102 @@ void drawFloor()
     glDisable(GL_TEXTURE_2D);
 }
 
-void drawMetalSphere()
+void drawPlasticSphere()
 {
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, metalTexture);
-
-    // Set the material properties for a metallic sphere
-    glMaterialfv(GL_FRONT, GL_SPECULAR, metalSpecular);
-    glMaterialf(GL_FRONT, GL_SHININESS, metalShininess);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, plasticDiffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, plasticSpecular);
+    glMaterialf(GL_FRONT, GL_SHININESS, plasticShininess);
 
     glPushMatrix();
-    glTranslatef(-2.0f, 1.0f, 0.0f);
+    glTranslatef(-7.0f, 0.0f, 0.0f);
     glutSolidSphere(0.5f, 20, 20);
     glPopMatrix();
-
-    glDisable(GL_TEXTURE_2D);
 }
 
 void drawTexturedCube()
 {
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, cubeTexture);
+    // Set the material properties for a yellow cube
+    GLfloat cubeDiffuse[] = { 1.0f, 1.0f, 0.0f, 1.0f }; // Yellow color
+    GLfloat cubeSpecular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
+    GLfloat cubeShininess = 64.0f;
 
-    // Set the material properties for a cube
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, cubeDiffuse);
     glMaterialfv(GL_FRONT, GL_SPECULAR, cubeSpecular);
     glMaterialf(GL_FRONT, GL_SHININESS, cubeShininess);
 
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, cubeTexture);
+
     glPushMatrix();
-    glTranslatef(2.0f, 1.0f, 0.0f);
+    glTranslatef(2.0f, 0.0f, -10.0f);
     glutSolidCube(1.0f);
     glPopMatrix();
 
     glDisable(GL_TEXTURE_2D);
 }
 
-void drawTexturedCone()
+void drawMetalTeapot()
 {
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, cubeTexture);
-
-    // Set the material properties for a cone
-    glMaterialfv(GL_FRONT, GL_SPECULAR, cubeSpecular);
-    glMaterialf(GL_FRONT, GL_SHININESS, cubeShininess);
+    // Set the material properties for a metallic teapot
+    glMaterialfv(GL_FRONT, GL_SPECULAR, teapotSpecular);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, teapotDiffuse);
+    glMaterialf(GL_FRONT, GL_SHININESS, teapotShininess);
 
     glPushMatrix();
-    glTranslatef(0.0f, 1.0f, -5.0f);
-    glutSolidCone(0.5f, 1.0f, 20, 20);
+    glTranslatef(-4.0f, 0.0f, -1.0f); // Position the teapot in the scene
+    glutSolidTeapot(1.0);
     glPopMatrix();
+}
 
-    glDisable(GL_TEXTURE_2D);
+void drawSkybox()
+{
+    glDepthFunc(GL_LEQUAL);  // Change depth function so depth test passes when values are equal to depth buffer's content
+    glEnable(GL_TEXTURE_CUBE_MAP);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+
+    // Draw each face of the skybox
+    glBegin(GL_QUADS);
+
+    // Front face
+    glTexCoord3f(-1.0f, 1.0f, -1.0f); glVertex3f(-50.0f, 50.0f, -50.0f);
+    glTexCoord3f(-1.0f, -1.0f, -1.0f); glVertex3f(-50.0f, -50.0f, -50.0f);
+    glTexCoord3f(1.0f, -1.0f, -1.0f); glVertex3f(50.0f, -50.0f, -50.0f);
+    glTexCoord3f(1.0f, 1.0f, -1.0f); glVertex3f(50.0f, 50.0f, -50.0f);
+
+    // Back face
+    glTexCoord3f(1.0f, 1.0f, 1.0f); glVertex3f(-50.0f, 50.0f, 50.0f);
+    glTexCoord3f(1.0f, -1.0f, 1.0f); glVertex3f(-50.0f, -50.0f, 50.0f);
+    glTexCoord3f(-1.0f, -1.0f, 1.0f); glVertex3f(50.0f, -50.0f, 50.0f);
+    glTexCoord3f(-1.0f, 1.0f, 1.0f); glVertex3f(50.0f, 50.0f, 50.0f);
+
+    // Top face
+    glTexCoord3f(-1.0f, 1.0f, 1.0f); glVertex3f(-50.0f, 50.0f, -50.0f);
+    glTexCoord3f(1.0f, 1.0f, 1.0f); glVertex3f(50.0f, 50.0f, -50.0f);
+    glTexCoord3f(1.0f, 1.0f, -1.0f); glVertex3f(50.0f, 50.0f, 50.0f);
+    glTexCoord3f(-1.0f, 1.0f, -1.0f); glVertex3f(-50.0f, 50.0f, 50.0f);
+
+    // Bottom face
+    glTexCoord3f(-1.0f, -1.0f, -1.0f); glVertex3f(-50.0f, -50.0f, -50.0f);
+    glTexCoord3f(1.0f, -1.0f, -1.0f); glVertex3f(50.0f, -50.0f, -50.0f);
+    glTexCoord3f(1.0f, -1.0f, 1.0f); glVertex3f(50.0f, -50.0f, 50.0f);
+    glTexCoord3f(-1.0f, -1.0f, 1.0f); glVertex3f(-50.0f, -50.0f, 50.0f);
+
+    // Right face
+    glTexCoord3f(1.0f, -1.0f, -1.0f); glVertex3f(50.0f, -50.0f, -50.0f);
+    glTexCoord3f(1.0f, -1.0f, 1.0f); glVertex3f(50.0f, -50.0f, 50.0f);
+    glTexCoord3f(1.0f, 1.0f, 1.0f); glVertex3f(50.0f, 50.0f, 50.0f);
+    glTexCoord3f(1.0f, 1.0f, -1.0f); glVertex3f(50.0f, 50.0f, -50.0f);
+
+    // Left face
+    glTexCoord3f(-1.0f, -1.0f, 1.0f); glVertex3f(-50.0f, -50.0f, 50.0f);
+    glTexCoord3f(-1.0f, -1.0f, -1.0f); glVertex3f(-50.0f, -50.0f, -50.0f);
+    glTexCoord3f(-1.0f, 1.0f, -1.0f); glVertex3f(-50.0f, 50.0f, -50.0f);
+    glTexCoord3f(-1.0f, 1.0f, 1.0f); glVertex3f(-50.0f, 50.0f, 50.0f);
+
+    glEnd();
+
+    glDisable(GL_TEXTURE_CUBE_MAP);
+    glDepthFunc(GL_LESS);  // Set depth function back to default
 }
 
 void renderScene()
@@ -473,9 +590,11 @@ void renderScene()
     drawLightBox();
 
     // Render additional objects
-    drawMetalSphere();
+    drawPlasticSphere();
     drawTexturedCube();
-    drawTexturedCone();
+
+    // Render the metallic teapot
+    drawMetalTeapot();
 }
 
 void display()
@@ -491,7 +610,7 @@ void display()
     // Set up the camera
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(45.0f, (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
+    gluPerspective(45.0f, (float)windowWidth / (float)windowHeight, 0.1f, 1000.0f);
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
@@ -513,6 +632,12 @@ void display()
         // Use the main camera
         gluLookAt(camX, camY, camZ, camX + sin(camYaw), camY + sin(camPitch), camZ - cos(camYaw), 0.0f, 1.0f, 0.0f);
     }
+
+    // Render the skybox before other objects
+    glPushMatrix();
+    glTranslatef(camX, camY, camZ);  // Translate to the camera position
+    drawSkybox();
+    glPopMatrix();
 
     // Render the scene
     renderScene();
@@ -540,23 +665,26 @@ void display()
     ImGui::Dummy(ImVec2(0.0f, 7.0f));
     ImGui::Text("Right-hand Angles");
     ImGui::PushFont(smallFont);
-    ImGui::Text("Shoulder Pitch");
+    ImGui::Text("Shoulder");
+    ImGui::Text("Pitch"); ImGui::SameLine();
     ImGui::SliderFloat("##Shoulder Pitch", &shoulderPitch, -180.0f, 180.0f);
-    ImGui::Text("Shoulder Yaw");
+    ImGui::Text("Yaw"); ImGui::SameLine();
     ImGui::SliderFloat("##Shoulder Yaw", &shoulderYaw, -180.0f, 180.0f);
-    ImGui::Text("Shoulder Roll");
+    ImGui::Text("Roll"); ImGui::SameLine();
     ImGui::SliderFloat("##Shoulder Roll", &shoulderRoll, -180.0f, 180.0f);
-    ImGui::Text("Elbow Pitch");
+    ImGui::Text("Elbow");
+    ImGui::Text("Pitch"); ImGui::SameLine();
     ImGui::SliderFloat("##Elbow Pitch", &elbowPitch, -180.0f, 180.0f);
-    ImGui::Text("Elbow Yaw");
+    ImGui::Text("Yaw"); ImGui::SameLine();
     ImGui::SliderFloat("##Elbow Yaw", &elbowYaw, -180.0f, 180.0f);
-    ImGui::Text("Elbow Roll");
+    ImGui::Text("Roll"); ImGui::SameLine();
     ImGui::SliderFloat("##Elbow Roll", &elbowRoll, -180.0f, 180.0f);
-    ImGui::Text("Wrist Pitch");
+    ImGui::Text("Wrist");
+    ImGui::Text("Pitch"); ImGui::SameLine();
     ImGui::SliderFloat("##Wrist Pitch", &wristPitch, -180.0f, 180.0f);
-    ImGui::Text("Wrist Yaw");
+    ImGui::Text("Yaw"); ImGui::SameLine();
     ImGui::SliderFloat("##Wrist Yaw", &wristYaw, -180.0f, 180.0f);
-    ImGui::Text("Wrist Roll");
+    ImGui::Text("Roll"); ImGui::SameLine();
     ImGui::SliderFloat("##Wrist Roll", &wristRoll, -180.0f, 180.0f);
     ImGui::PopFont();
 
@@ -575,10 +703,18 @@ void display()
     ImGui::Text("Leg Angles");
     ImGui::PushFont(smallFont);
     ImGui::Text("Hip");
+    ImGui::Text("Left Hip Angle");
+    ImGui::SameLine();
     ImGui::SliderFloat("##Left Hip Angle", &leftHipAngle, -90.0f, 90.0f);
+    ImGui::Text("Right Hip Angle");
+    ImGui::SameLine();
     ImGui::SliderFloat("##Right Hip Angle", &rightHipAngle, -90.0f, 90.0f);
     ImGui::Text("Knee");
+    ImGui::Text("Left Knee Angle");
+    ImGui::SameLine();
     ImGui::SliderFloat("##Left Knee Angle", &leftKneeAngle, -90.0f, 90.0f);
+    ImGui::Text("Right Knee Angle");
+    ImGui::SameLine();
     ImGui::SliderFloat("##Right Knee Angle", &rightKneeAngle, -90.0f, 90.0f);
     ImGui::PopFont();
 
@@ -628,24 +764,40 @@ void display()
 
     ImGui::Text("Floor Material");
     ImGui::PushFont(smallFont);
-    ImGui::ColorEdit3("Floor Specular", (float*)floorSpecular);
+    ImGui::ColorEdit3("Floor Specular", floorSpecular);
     ImGui::SliderFloat("Floor Shininess", &floorShininess, 1.0f, 128.0f);
     ImGui::PopFont();
 
     ImGui::Separator();
 
-    ImGui::Text("Metal Sphere Material");
+    ImGui::Text("Plastic Sphere Material");
     ImGui::PushFont(smallFont);
-    ImGui::ColorEdit3("Metal Specular", (float*)metalSpecular);
-    ImGui::SliderFloat("Metal Shininess", &metalShininess, 1.0f, 128.0f);
+    ImGui::ColorEdit3("Specular", plasticSpecular);
+    ImGui::SliderFloat("Shininess", &plasticShininess, 1.0f, 128.0f);
     ImGui::PopFont();
 
     ImGui::Separator();
 
     ImGui::Text("Cube Material");
     ImGui::PushFont(smallFont);
-    ImGui::ColorEdit3("Cube Specular", (float*)cubeSpecular);
+    ImGui::ColorEdit3("Cube Specular", cubeSpecular);
     ImGui::SliderFloat("Cube Shininess", &cubeShininess, 1.0f, 128.0f);
+    ImGui::PopFont();
+
+    ImGui::Separator();
+
+    ImGui::Text("Teapot Material");
+    ImGui::PushFont(smallFont);
+    ImGui::ColorEdit3("Teapot Specular", teapotSpecular);
+    ImGui::SliderFloat("Teapot Shininess", &teapotShininess, 1.0f, 128.0f);
+    ImGui::PopFont();
+
+    ImGui::Separator();
+
+    ImGui::Text("Robot Material");
+    ImGui::PushFont(smallFont);
+    ImGui::ColorEdit3("Robot Specular", robotSpecular);
+    ImGui::SliderFloat("Robot Shininess", &robotShininess, 1.0f, 128.0f);
     ImGui::PopFont();
 
     ImGui::Separator();
@@ -679,6 +831,8 @@ void display()
             headPitch = headCamPitch;
         }
     }
+
+    ImGui::Separator();
 
     if (ImGui::Button("Help"))
     {
@@ -921,6 +1075,27 @@ void init()
     }
 
     loadTextures();
+
+    // Configure texture units
+    glActiveTexture(GL_TEXTURE0);
+    glEnable(GL_TEXTURE_2D);
+
+    glActiveTexture(GL_TEXTURE1);
+    glEnable(GL_TEXTURE_2D);
+
+    glActiveTexture(GL_TEXTURE2);
+    glEnable(GL_TEXTURE_2D);
+
+    glActiveTexture(GL_TEXTURE3);
+    glEnable(GL_TEXTURE_2D);
+
+    glActiveTexture(GL_TEXTURE4);
+    glEnable(GL_TEXTURE_2D);
+
+    glActiveTexture(GL_TEXTURE5);
+    glEnable(GL_TEXTURE_2D);
+
+    glActiveTexture(GL_TEXTURE0); // Reset to default texture unit
 }
 
 void idle()
