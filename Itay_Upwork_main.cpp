@@ -74,9 +74,6 @@ GLuint cubemapTexture;
 GLfloat floorSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
 GLfloat floorShininess = 100.0f;
 
-GLfloat metalSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-GLfloat metalShininess = 128.0f;
-
 GLfloat cubeSpecular[] = { 1.0f, 1.0f, 0.0f, 1.0f }; // Yellow color
 GLfloat cubeShininess = 64.0f;
 
@@ -85,15 +82,14 @@ GLfloat plasticSpecular[] = { 0.3f, 0.3f, 0.3f, 1.0f };
 GLfloat plasticShininess = 5.0f;
 
 // Teapot material properties
-GLfloat teapotDiffuse[] = { 0.0f, 0.5f, 1.0f, 1.0f }; // Blue color
-GLfloat teapotSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-GLfloat teapotShininess = 120.0f;
+GLfloat teapotDiffuse[] = { 0.804f, 0.498f, 0.196f, 1.0f };
+GLfloat teapotSpecular[] = { 0.8f, 0.6f, 0.4f, 1.0f };
+GLfloat teapotShininess = 76.8f;
 
 // Set the material properties for the robot
-GLfloat robotDiffuse[] = { 0.5f, 0.8f, 0.4f, 1.0f };
-GLfloat robotSpecular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
-GLfloat robotShininess = 100.0f;
-
+GLfloat robotDiffuse[] = { 0.7f, 0.7f, 0.7f, 1.0f };
+GLfloat robotSpecular[] = { 0.9f, 0.9f, 0.9f, 1.0f };
+GLfloat robotShininess = 128.0f;
 enum Direction
 {
     FORWARD,
@@ -1085,21 +1081,6 @@ void init()
 
     // Configure texture units
     glActiveTexture(GL_TEXTURE0);
-    glEnable(GL_TEXTURE_2D);
-
-    glActiveTexture(GL_TEXTURE1);
-    glEnable(GL_TEXTURE_2D);
-
-    glActiveTexture(GL_TEXTURE2);
-    glEnable(GL_TEXTURE_2D);
-
-    glActiveTexture(GL_TEXTURE3);
-    glEnable(GL_TEXTURE_2D);
-
-    glActiveTexture(GL_TEXTURE4);
-    glEnable(GL_TEXTURE_2D);
-
-    glActiveTexture(GL_TEXTURE5);
     glEnable(GL_TEXTURE_2D);
 
     glActiveTexture(GL_TEXTURE0); // Reset to default texture unit
