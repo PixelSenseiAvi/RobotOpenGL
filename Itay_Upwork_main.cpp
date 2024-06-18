@@ -11,7 +11,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 
 #include <vector>
@@ -36,36 +35,35 @@ float camX = 0.0f, camY = 5.0f, camZ = 15.0f;
 float camPitch = 0.0f, camYaw = 0.0f;
 
 // Secondary camera (inside robot head)
-float headCamX = 0.0f, headCamY = 0.75f, headCamZ = 0.0f;
 float headCamYaw = 0.0f, headCamPitch = 0.0f;
-
+float headCamX = 0.0f, headCamY = 0.75f, headCamZ = 0.0f;
 bool useHeadCam = false;
 
 // Lighting parameters
 float lightPos[] = { 1.2f, 7.5f, 2.0f, 1.0f };
-float ambientStrength = 1.0f;
+float ambientStrength = 0.35f;
 float pointLightIntensity = 1.0f;
 float lightAngle = 0.0f;
+bool isLightPaused = false;
 
 // Window size
 int windowWidth = 1280;
 int windowHeight = 720;
-
 bool show_help_window = false;
 
 ImFont* smallFont, * font;
-
-// Textures
-GLuint floorTexture, cubeTexture;
 GLuint cubemapTexture;
 
 // Animation parameters
 bool isMoving = false;
 float walkCycle = 0.0f;
 
+GLuint floorTexture;
+
 // Material properties
-GLfloat floorSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+GLfloat floorSpecular[] = { 0.9f, 0.9f, 0.9f, 1.0f };
 GLfloat floorShininess = 100.0f;
+GLfloat floorDiffuse[] = { 0.5f, 0.5f, 0.5f, 1.0f };
 
 GLfloat cubeDiffuse[] = { 0.6f, 0.2f, 0.3f , 1.0f };
 GLfloat cubeSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -170,7 +168,6 @@ bool loadCubemapTexture(const std::vector<std::string>& faces, GLuint& textureID
 void loadTextures()
 {
     loadTexture("Assets/tiles_0006_color_1k.jpg", floorTexture);
-    loadTexture("Assets/canvas.jpg", cubeTexture);
 
     std::vector<std::string> faces
     {
@@ -190,31 +187,22 @@ void drawLightBox()
     glPushMatrix();
     glTranslatef(lightPos[0], lightPos[1], lightPos[2]);
 
-    GLfloat prevAmbient[4], prevDiffuse[4], prevSpecular[4], prevShininess[1], prevEmission[4];
-    glGetMaterialfv(GL_FRONT, GL_AMBIENT, prevAmbient);
-    glGetMaterialfv(GL_FRONT, GL_DIFFUSE, prevDiffuse);
-    glGetMaterialfv(GL_FRONT, GL_SPECULAR, prevSpecular);
-    glGetMaterialfv(GL_FRONT, GL_SHININESS, prevShininess);
-    glGetMaterialfv(GL_FRONT, GL_EMISSION, prevEmission);
+    GLfloat prevMaterial[4];
+    glGetMaterialfv(GL_FRONT, GL_AMBIENT, prevMaterial);
 
     GLfloat yellow[] = { 1.0f, 1.0f, 0.0f, 1.0f };
-    GLfloat brightYellow[] = { 1.0f, 1.0f, 0.0f, 1.0f };
-    GLfloat white[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    GLfloat emission[] = { 0.5f, 0.5f, 0.0f, 1.0f };
+    GLfloat emission[] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
     glMaterialfv(GL_FRONT, GL_AMBIENT, yellow);
-    glMaterialfv(GL_FRONT, GL_DIFFUSE, brightYellow);
-    glMaterialfv(GL_FRONT, GL_SPECULAR, white);
-    glMaterialf(GL_FRONT, GL_SHININESS, 50.0f);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, yellow);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, yellow);
     glMaterialfv(GL_FRONT, GL_EMISSION, emission);
+    glMaterialf(GL_FRONT, GL_SHININESS, 50.0f);
 
     glutSolidCube(0.2f);
 
-    glMaterialfv(GL_FRONT, GL_AMBIENT, prevAmbient);
-    glMaterialfv(GL_FRONT, GL_DIFFUSE, prevDiffuse);
-    glMaterialfv(GL_FRONT, GL_SPECULAR, prevSpecular);
-    glMaterialfv(GL_FRONT, GL_SHININESS, prevShininess);
-    glMaterialfv(GL_FRONT, GL_EMISSION, prevEmission);
+    glMaterialfv(GL_FRONT, GL_AMBIENT, prevMaterial);
+    glMaterialfv(GL_FRONT, GL_EMISSION, prevMaterial);
 
     glPopMatrix();
 }
@@ -254,16 +242,6 @@ void drawJoint(float radius)
     glutSolidSphere(radius, 20, 20);
 }
 
-void drawMiddlePart()
-{
-    glPushMatrix();
-    glTranslatef(0.0f, 0.9f, 0.0f);
-    glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
-    glColor3f(0.0f, 0.0f, 1.0f);
-    drawLimb(0.75f, 0.15f);
-    glPopMatrix();
-}
-
 void drawRightArm()
 {
     glPushMatrix();
@@ -275,7 +253,6 @@ void drawRightArm()
     glm::mat4 shoulderRotation = glm::toMat4(shoulderQuaternion);
 
     glMultMatrixf(glm::value_ptr(shoulderRotation));
-
     glColor3f(0.0f, 1.0f, 0.0f);
     drawJoint(0.25f);
 
@@ -294,7 +271,6 @@ void drawRightArm()
     glm::mat4 elbowRotation = glm::toMat4(elbowQuaternion);
 
     glMultMatrixf(glm::value_ptr(elbowRotation));
-
     glColor3f(0.0f, 1.0f, 0.0f);
     drawJoint(0.2f);
 
@@ -313,7 +289,6 @@ void drawRightArm()
     glm::mat4 wristRotation = glm::toMat4(wristQuaternion);
 
     glMultMatrixf(glm::value_ptr(wristRotation));
-
     glColor3f(0.0f, 1.0f, 0.0f);
     drawJoint(0.15f);
 
@@ -378,12 +353,16 @@ void drawRobot()
     drawLeg(leftHipAngle, leftKneeAngle, -0.25f, 0.0f, 0.0f); // Left leg
     drawLeg(rightHipAngle, rightKneeAngle, 0.25f, 0.0f, 0.0f); // Right leg
 
-    drawMiddlePart();
+    glPushMatrix();
+    glTranslatef(0.0f, 0.9f, 0.0f);
+    glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
+    glColor3f(0.0f, 0.0f, 1.0f);
+    drawLimb(0.75f, 0.15f);
+    glPopMatrix();
 
     drawJoint(0.18f);
 
     drawRobotHead(!useHeadCam);
-
     drawRightArm();
 
     drawNeck();
@@ -393,37 +372,33 @@ void drawRobot()
 
 void drawFloor()
 {
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, floorTexture);
-
     glMaterialfv(GL_FRONT, GL_SPECULAR, floorSpecular);
     glMaterialf(GL_FRONT, GL_SHININESS, floorShininess);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, floorDiffuse);
 
     glPushMatrix();
     glTranslatef(0.0f, -0.9f, 0.0f);
-    glScalef(10.0f, 0.1f, 10.0f);
 
+    // Bind floor texture
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, floorTexture);
+
+    glEnable(GL_TEXTURE_2D);
     glBegin(GL_QUADS);
-    glNormal3f(0.0f, 1.0f, 0.0f);
-    for (int i = -5; i < 5; ++i)
+    for (int i = -10; i < 10; ++i)
     {
-        for (int j = -5; j < 5; ++j)
+        for (int j = -10; j < 10; ++j)
         {
-            glTexCoord2f(0.0f, 0.0f);
-            glVertex3f(i, 0.0f, j);
-            glTexCoord2f(1.0f, 0.0f);
-            glVertex3f(i + 1, 0.0f, j);
-            glTexCoord2f(1.0f, 1.0f);
-            glVertex3f(i + 1, 0.0f, j + 1);
-            glTexCoord2f(0.0f, 1.0f);
-            glVertex3f(i, 0.0f, j + 1);
+            glTexCoord2f(0.0f, 0.0f); glVertex3f(i, 0.0f, j);
+            glTexCoord2f(1.0f, 0.0f); glVertex3f(i + 1, 0.0f, j);
+            glTexCoord2f(1.0f, 1.0f); glVertex3f(i + 1, 0.0f, j + 1);
+            glTexCoord2f(0.0f, 1.0f); glVertex3f(i, 0.0f, j + 1);
         }
     }
     glEnd();
+    glDisable(GL_TEXTURE_2D);
 
     glPopMatrix();
-
-    glDisable(GL_TEXTURE_2D);
 }
 
 void drawPlasticSphere()
@@ -444,15 +419,11 @@ void drawTexturedCube()
     glMaterialfv(GL_FRONT, GL_SPECULAR, cubeSpecular);
     glMaterialf(GL_FRONT, GL_SHININESS, cubeShininess);
 
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, cubeTexture);
-
     glPushMatrix();
     glTranslatef(2.0f, 0.0f, -10.0f);
     glutSolidCube(1.0f);
     glPopMatrix();
 
-    glDisable(GL_TEXTURE_2D);
 }
 
 void drawMetalTeapot()
@@ -474,7 +445,6 @@ void drawSkybox()
     glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
 
     glBegin(GL_QUADS);
-
     glTexCoord3f(-1.0f, 1.0f, -1.0f); glVertex3f(-50.0f, 50.0f, -50.0f);
     glTexCoord3f(-1.0f, -1.0f, -1.0f); glVertex3f(-50.0f, -50.0f, -50.0f);
     glTexCoord3f(1.0f, -1.0f, -1.0f); glVertex3f(50.0f, -50.0f, -50.0f);
@@ -511,11 +481,9 @@ void drawSkybox()
     glDepthFunc(GL_LESS);
 }
 
-
 void renderScene()
 {
     setupLighting();
-
     drawFloor();
     drawRobot();
     drawLightBox();
@@ -542,11 +510,11 @@ void display()
     if (useHeadCam)
     {
         float eyeX = robotX;
-        float eyeY = robotY + headCamY;
-        float eyeZ = robotZ + headCamZ;
-        float lookX = eyeX + sin(glm::radians(headYaw)) * cos(glm::radians(headPitch));
-        float lookY = eyeY + sin(glm::radians(headPitch));
-        float lookZ = eyeZ - cos(glm::radians(headYaw)) * cos(glm::radians(headPitch));
+        float eyeY = robotY + 0.75f;
+        float eyeZ = robotZ + 0.0f;
+        float lookX = eyeX + sin(glm::radians(headCamYaw)) * cos(glm::radians(headCamPitch));
+        float lookY = eyeY + sin(glm::radians(headCamPitch));
+        float lookZ = eyeZ - cos(glm::radians(headCamYaw)) * cos(glm::radians(headCamPitch));
 
         gluLookAt(eyeX, eyeY, eyeZ, lookX, lookY, lookZ, 0.0f, 1.0f, 0.0f);
     }
@@ -671,15 +639,20 @@ void display()
     ImGui::SliderFloat("##Light Angle", &lightAngle, 0.0f, 360.0f);
     ImGui::PopFont();
 
-    ImGui::Dummy(ImVec2(0.0f, 7.0f));
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
     ImGui::Text("Ambient Strength");
     ImGui::PushFont(smallFont);
     ImGui::SliderFloat("##Ambient Strength", &ambientStrength, 0.0f, 1.0f);
     ImGui::PopFont();
-    ImGui::Dummy(ImVec2(0.0f, 7.0f));
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
     ImGui::Text("Point Light Intensity");
     ImGui::PushFont(smallFont);
     ImGui::SliderFloat("##Point Light Intensity", &pointLightIntensity, 0.0f, 1.0f);
+    ImGui::PopFont();
+
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    ImGui::PushFont(smallFont);
+    ImGui::Checkbox("Pause Light", &isLightPaused);
     ImGui::PopFont();
 
     ImGui::Separator();
@@ -720,7 +693,6 @@ void display()
 
     if (ImGui::Checkbox("Use Head Camera", &useHeadCam))
     {
-        // Save or restore the camera state when switching
         if (useHeadCam)
         {
             robotX = robotY = robotZ = 0.0f;
@@ -864,7 +836,6 @@ void keyboard(unsigned char key, int x, int y)
     glutPostRedisplay();
 }
 
-
 void mouseMotion(int x, int y)
 {
     static bool firstMouse = true;
@@ -917,6 +888,17 @@ void mouseMotion(int x, int y)
     glutPostRedisplay();
 }
 
+void updateLightPosition()
+{
+    float radiusX = 70.0f;
+    float radiusY = 70.0f;
+    float radiusZ = 20.0f;
+
+    lightPos[0] = radiusX * cos(glm::radians(lightAngle));
+    lightPos[1] = radiusY * sin(glm::radians(lightAngle));
+    lightPos[2] = radiusZ * sin(glm::radians(lightAngle));
+}
+
 void updateAnimation()
 {
     if (isMoving)
@@ -950,8 +932,7 @@ void init()
 
     ImGui::StyleColorsDark();
 
-    ImGuiIO& io = ImGui::GetIO();
-    (void)&io;
+    ImGuiIO& io = ImGui::GetIO(); (void)&io;
     io.FontGlobalScale = 1.5f;
     io.DisplaySize = ImVec2((float)windowWidth, (float)windowHeight);
 
@@ -965,31 +946,22 @@ void init()
     }
 
     loadTextures();
-
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_TEXTURE_2D);
-
-    glActiveTexture(GL_TEXTURE0);
 }
 
 void idle()
 {
-    updateAnimation();
-
-    float radiusX = 70.0f;
-    float radiusY = 70.0f;
-    float radiusZ = 20.0f;
-
-    lightPos[0] = radiusX * cos(glm::radians(lightAngle));
-    lightPos[1] = radiusY * sin(glm::radians(lightAngle));
-    lightPos[2] = radiusZ * sin(glm::radians(lightAngle));
-
-    lightAngle += 0.5f;
-    if (lightAngle >= 360.0f)
+    if (!isLightPaused)
     {
-        lightAngle -= 360.0f;
+        lightAngle += 0.5f;
+        if (lightAngle >= 360.0f)
+        {
+            lightAngle -= 360.0f;
+        }
     }
-
+    updateLightPosition();
+    updateAnimation();
     glutPostRedisplay();
 }
 
