@@ -621,20 +621,6 @@ void display()
     ImGui::PopFont();
 
     ImGui::Separator();
-    ImGui::Text("Secondary Camera Position");
-    ImGui::PushFont(smallFont);
-    ImGui::Text("X");
-    ImGui::SameLine();
-    ImGui::SliderFloat("##Secondary Camera Position X", &secCamX, -10.0f, 10.0f);
-    ImGui::Text("Y");
-    ImGui::SameLine();
-    ImGui::SliderFloat("##Secondary Camera Position Y", &secCamY, -10.0f, 10.0f);
-    ImGui::Text("Z");
-    ImGui::SameLine();
-    ImGui::SliderFloat("##Secondary Camera Position Z", &secCamZ, -10.0f, 10.0f);
-    ImGui::PopFont();
-
-    ImGui::Separator();
     ImGui::Text("Light Position");
     ImGui::PushFont(smallFont);
     ImGui::Text("X");
