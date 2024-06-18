@@ -36,8 +36,10 @@ float camPitch = 0.0f, camYaw = 0.0f;
 
 // Secondary camera (inside robot head)
 float headCamYaw = 0.0f, headCamPitch = 0.0f;
-float headCamX = 0.0f, headCamY = 0.75f, headCamZ = 0.0f;
+float headCamX = 0.0f, headCamY = 1.5f, headCamZ = 0.0f;
+float secCamX = 0.0f, secCamY = 1.5f, secCamZ = 0.0f;
 bool useHeadCam = false;
+bool headVisible = true;  // New variable to control head visibility
 
 // Lighting parameters
 float lightPos[] = { 1.2f, 7.5f, 2.0f, 1.0f };
@@ -74,8 +76,8 @@ GLfloat plasticSpecular[] = { 0.3f, 0.3f, 0.3f, 1.0f };
 GLfloat plasticShininess = 5.0f;
 
 GLfloat teapotDiffuse[] = { 0.804f, 0.498f, 0.196f, 1.0f };
-GLfloat teapotSpecular[] = { 0.8f, 0.6f, 0.4f, 1.0f };
-GLfloat teapotShininess = 110.0f;
+GLfloat teapotSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+GLfloat teapotShininess = 200.0f;
 
 GLfloat robotDiffuse[] = { 0.7f, 0.7f, 0.7f, 1.0f };
 GLfloat robotSpecular[] = { 0.9f, 0.9f, 0.9f, 1.0f };
@@ -207,9 +209,9 @@ void drawLightBox()
     glPopMatrix();
 }
 
-void drawRobotHead(bool visible)
+void drawRobotHead()
 {
-    if (!visible)
+    if (!headVisible)
         return;
 
     glPushMatrix();
@@ -362,7 +364,7 @@ void drawRobot()
 
     drawJoint(0.18f);
 
-    drawRobotHead(!useHeadCam);
+    drawRobotHead();
     drawRightArm();
 
     drawNeck();
@@ -509,9 +511,9 @@ void display()
 
     if (useHeadCam)
     {
-        float eyeX = robotX;
-        float eyeY = robotY + 0.75f;
-        float eyeZ = robotZ + 0.0f;
+        float eyeX = robotX + secCamX;
+        float eyeY = robotY + secCamY;
+        float eyeZ = robotZ + secCamZ;
         float lookX = eyeX + sin(glm::radians(headCamYaw)) * cos(glm::radians(headCamPitch));
         float lookY = eyeY + sin(glm::radians(headCamPitch));
         float lookZ = eyeZ - cos(glm::radians(headCamYaw)) * cos(glm::radians(headCamPitch));
@@ -619,6 +621,20 @@ void display()
     ImGui::PopFont();
 
     ImGui::Separator();
+    ImGui::Text("Secondary Camera Position");
+    ImGui::PushFont(smallFont);
+    ImGui::Text("X");
+    ImGui::SameLine();
+    ImGui::SliderFloat("##Secondary Camera Position X", &secCamX, -10.0f, 10.0f);
+    ImGui::Text("Y");
+    ImGui::SameLine();
+    ImGui::SliderFloat("##Secondary Camera Position Y", &secCamY, -10.0f, 10.0f);
+    ImGui::Text("Z");
+    ImGui::SameLine();
+    ImGui::SliderFloat("##Secondary Camera Position Z", &secCamZ, -10.0f, 10.0f);
+    ImGui::PopFont();
+
+    ImGui::Separator();
     ImGui::Text("Light Position");
     ImGui::PushFont(smallFont);
     ImGui::Text("X");
@@ -674,7 +690,7 @@ void display()
     ImGui::Text("Teapot Material");
     ImGui::PushFont(smallFont);
     ImGui::ColorEdit3("Teapot Specular", teapotSpecular);
-    ImGui::SliderFloat("Teapot Shininess", &teapotShininess, 1.0f, 128.0f);
+    ImGui::SliderFloat("Teapot Shininess", &teapotShininess, 1.0f, 200.0f);
     ImGui::PopFont();
 
     ImGui::Text("Robot Material");
@@ -696,6 +712,11 @@ void display()
         if (useHeadCam)
         {
             robotX = robotY = robotZ = 0.0f;
+            headVisible = false;  // Hide head when using head camera
+        }
+        else
+        {
+            headVisible = true;   // Show head when using main camera
         }
     }
 
@@ -733,7 +754,6 @@ void display()
 
     glutSwapBuffers();
 }
-
 void reshape(int width, int height)
 {
     windowWidth = width;
