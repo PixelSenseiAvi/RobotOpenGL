@@ -31,7 +31,7 @@ float leftHipAngle = 0.0f, leftKneeAngle = 0.0f;
 float rightHipAngle = 0.0f, rightKneeAngle = 0.0f;
 
 // Camera parameters
-float camX = 0.0f, camY = 5.0f, camZ = 15.0f;
+float camX = 0.0f, camY = 5.0f, camZ = 20.0f;
 float camPitch = 0.0f, camYaw = 0.0f;
 
 // Secondary camera (inside robot head)
@@ -43,7 +43,7 @@ bool headVisible = true;  // New variable to control head visibility
 
 // Lighting parameters
 float lightPos[] = { 1.2f, 7.5f, 2.0f, 1.0f };
-float ambientStrength = 0.35f;
+float ambientStrength = 0.25f;
 float pointLightIntensity = 1.0f;
 float lightAngle = 0.0f;
 bool isLightPaused = false;
@@ -511,12 +511,24 @@ void display()
 
     if (useHeadCam)
     {
-        float eyeX = robotX + secCamX;
-        float eyeY = robotY + secCamY;
-        float eyeZ = robotZ + secCamZ;
-        float lookX = eyeX + sin(glm::radians(headCamYaw)) * cos(glm::radians(headCamPitch));
-        float lookY = eyeY + sin(glm::radians(headCamPitch));
-        float lookZ = eyeZ - cos(glm::radians(headCamYaw)) * cos(glm::radians(headCamPitch));
+        // Calculate the robot's rotation matrix
+        glm::mat4 robotRotationMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(robotRotation), glm::vec3(0.0f, 1.0f, 0.0f));
+
+        // Transform the secondary camera's position using the robot's rotation matrix
+        glm::vec4 transformedSecCamPos = robotRotationMatrix * glm::vec4(secCamX, secCamY, secCamZ, 1.0f);
+        glm::vec4 transformedLookDir = robotRotationMatrix * glm::vec4(
+            sin(glm::radians(headCamYaw)) * cos(glm::radians(headCamPitch)),
+            sin(glm::radians(headCamPitch)),
+            -cos(glm::radians(headCamYaw)) * cos(glm::radians(headCamPitch)),
+            0.0f
+        );
+
+        float eyeX = robotX + transformedSecCamPos.x;
+        float eyeY = robotY + transformedSecCamPos.y;
+        float eyeZ = robotZ + transformedSecCamPos.z;
+        float lookX = eyeX + transformedLookDir.x;
+        float lookY = eyeY + transformedLookDir.y;
+        float lookZ = eyeZ + transformedLookDir.z;
 
         gluLookAt(eyeX, eyeY, eyeZ, lookX, lookY, lookZ, 0.0f, 1.0f, 0.0f);
     }
@@ -740,6 +752,7 @@ void display()
 
     glutSwapBuffers();
 }
+
 void reshape(int width, int height)
 {
     windowWidth = width;
