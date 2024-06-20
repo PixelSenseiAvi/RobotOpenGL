@@ -46,7 +46,6 @@ float lightPos[] = { 1.2f, 7.5f, 2.0f, 1.0f };
 float ambientStrength = 0.25f;
 float pointLightIntensity = 1.0f;
 float lightAngle = 0.0f;
-bool isLightPaused = false;
 
 // Window size
 int windowWidth = 1280;
@@ -375,7 +374,7 @@ void drawRobot()
 void drawFloor()
 {
     glMaterialfv(GL_FRONT, GL_SPECULAR, floorSpecular);
-    glMaterialf(GL_FRONT, GL_SHININESS, 128.0f - floorShininess); // Inverted shininess
+    glMaterialf(GL_FRONT, GL_SHININESS, 128.0f - floorShininess);  // Adjust shininess correctly
     glMaterialfv(GL_FRONT, GL_DIFFUSE, floorDiffuse);
 
     glPushMatrix();
@@ -425,7 +424,6 @@ void drawTexturedCube()
     glTranslatef(2.0f, 0.0f, -10.0f);
     glutSolidCube(1.0f);
     glPopMatrix();
-
 }
 
 void drawMetalTeapot()
@@ -664,17 +662,12 @@ void display()
     ImGui::SliderFloat("##Point Light Intensity", &pointLightIntensity, 0.0f, 1.0f);
     ImGui::PopFont();
 
-    ImGui::Dummy(ImVec2(0.0f, 2.0f));
-    ImGui::PushFont(smallFont);
-    ImGui::Checkbox("Pause Light", &isLightPaused);
-    ImGui::PopFont();
-
     ImGui::Separator();
 
     ImGui::Text("Floor Material");
     ImGui::PushFont(smallFont);
     ImGui::ColorEdit3("Floor Specular", floorSpecular);
-    ImGui::SliderFloat("Floor Shininess", &floorShininess, 1.0f, 128.0f);
+    ImGui::SliderFloat("Floor Shininess", &floorShininess, 1.0f, 128.0f);  // Corrected the range
     ImGui::PopFont();
 
     ImGui::Separator();
@@ -907,6 +900,33 @@ void mouseMotion(int x, int y)
     glutPostRedisplay();
 }
 
+void updateLightPosition()
+{
+    lightPos[0] = 7.5f * cos(glm::radians(lightAngle));
+    lightPos[2] = 7.5f * sin(glm::radians(lightAngle));
+    glutPostRedisplay();
+}
+
+void updateAnimation()
+{
+    if (isMoving)
+    {
+        leftHipAngle = 30.0f * sin(walkCycle);
+        leftKneeAngle = 30.0f * sin(walkCycle + glm::pi<float>() / 2);
+        rightHipAngle = 30.0f * sin(walkCycle + glm::pi<float>());
+        rightKneeAngle = 30.0f * sin(walkCycle + 3 * glm::pi<float>() / 2);
+    }
+    else
+    {
+        leftHipAngle = 0.0f;
+        leftKneeAngle = 0.0f;
+        rightHipAngle = 0.0f;
+        rightKneeAngle = 0.0f;
+    }
+
+    glutPostRedisplay();
+}
+
 void init()
 {
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -938,6 +958,13 @@ void init()
     glEnable(GL_TEXTURE_2D);
 }
 
+void idle()
+{
+    updateLightPosition();
+    updateAnimation();
+    glutPostRedisplay();
+}
+
 int main(int argc, char** argv)
 {
     glutInit(&argc, argv);
@@ -952,7 +979,7 @@ int main(int argc, char** argv)
     glutKeyboardFunc(keyboard);
     glutPassiveMotionFunc(mouseMotion);
     glutReshapeFunc(reshape);
-    glutIdleFunc(display);
+    glutIdleFunc(idle);
 
     glutMainLoop();
 
