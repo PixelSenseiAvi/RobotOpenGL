@@ -375,7 +375,7 @@ void drawRobot()
 void drawFloor()
 {
     glMaterialfv(GL_FRONT, GL_SPECULAR, floorSpecular);
-    glMaterialf(GL_FRONT, GL_SHININESS, floorShininess);
+    glMaterialf(GL_FRONT, GL_SHININESS, 128.0f - floorShininess); // Inverted shininess
     glMaterialfv(GL_FRONT, GL_DIFFUSE, floorDiffuse);
 
     glPushMatrix();
@@ -907,37 +907,6 @@ void mouseMotion(int x, int y)
     glutPostRedisplay();
 }
 
-void updateLightPosition()
-{
-    float radiusX = 70.0f;
-    float radiusY = 70.0f;
-    float radiusZ = 20.0f;
-
-    lightPos[0] = radiusX * cos(glm::radians(lightAngle));
-    lightPos[1] = radiusY * sin(glm::radians(lightAngle));
-    lightPos[2] = radiusZ * sin(glm::radians(lightAngle));
-}
-
-void updateAnimation()
-{
-    if (isMoving)
-    {
-        leftHipAngle = 30.0f * sin(walkCycle);
-        leftKneeAngle = 30.0f * sin(walkCycle + glm::pi<float>() / 2);
-        rightHipAngle = 30.0f * sin(walkCycle + glm::pi<float>());
-        rightKneeAngle = 30.0f * sin(walkCycle + 3 * glm::pi<float>() / 2);
-    }
-    else
-    {
-        leftHipAngle = 0.0f;
-        leftKneeAngle = 0.0f;
-        rightHipAngle = 0.0f;
-        rightKneeAngle = 0.0f;
-    }
-
-    glutPostRedisplay();
-}
-
 void init()
 {
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -969,27 +938,12 @@ void init()
     glEnable(GL_TEXTURE_2D);
 }
 
-void idle()
-{
-    if (!isLightPaused)
-    {
-        lightAngle += 0.5f;
-        if (lightAngle >= 360.0f)
-        {
-            lightAngle -= 360.0f;
-        }
-    }
-    updateLightPosition();
-    updateAnimation();
-    glutPostRedisplay();
-}
-
 int main(int argc, char** argv)
 {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
     glutInitWindowSize(windowWidth, windowHeight);
-    glutCreateWindow("OpenGL with ImGui");
+    glutCreateWindow("Robot");
 
     glewInit();
     init();
@@ -998,7 +952,7 @@ int main(int argc, char** argv)
     glutKeyboardFunc(keyboard);
     glutPassiveMotionFunc(mouseMotion);
     glutReshapeFunc(reshape);
-    glutIdleFunc(idle);
+    glutIdleFunc(display);
 
     glutMainLoop();
 
