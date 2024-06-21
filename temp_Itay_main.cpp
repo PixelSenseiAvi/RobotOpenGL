@@ -101,8 +101,8 @@ void setupLighting()
     GLfloat ambientLight[] = { ambientStrength, ambientStrength, ambientStrength, 1.0f };
     glLightfv(GL_LIGHT0, GL_AMBIENT, ambientLight);
 
-    GLfloat diffuseLight[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    GLfloat specularLight[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    GLfloat diffuseLight[] = { pointLightIntensity, pointLightIntensity, pointLightIntensity, 1.0f };
+    GLfloat specularLight[] = { pointLightIntensity, pointLightIntensity, pointLightIntensity, 1.0f };
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuseLight);
     glLightfv(GL_LIGHT0, GL_SPECULAR, specularLight);
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
@@ -411,7 +411,7 @@ void drawPlasticSphere()
     glMaterialf(GL_FRONT, GL_SHININESS, plasticShininess);
 
     glPushMatrix();
-    glTranslatef(-7.0f, 0.0f, 0.0f);
+    glTranslatef(-7.0f, 0.0f, 4.0f);
     glutSolidSphere(0.5f, 20, 20);
     glPopMatrix();
 }
@@ -435,7 +435,7 @@ void drawMetalTeapot()
     glMaterialf(GL_FRONT, GL_SHININESS, teapotShininess);
 
     glPushMatrix();
-    glTranslatef(-4.0f, 0.0f, -1.0f);
+    glTranslatef(-4.0f, 0.0f, 7.0f);
     glutSolidTeapot(1.0);
     glPopMatrix();
 }
@@ -495,6 +495,7 @@ void renderScene()
 }
 
 
+
 void renderReflectedScene()
 {
     if (!enableReflection)
@@ -526,10 +527,17 @@ void renderReflectedScene()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    // Calculate reflection transformation based on light position
+    float reflectionOffsetX = lightPos[0] * 0.1f;
+    float reflectionOffsetZ = lightPos[2] * 0.1f;
+
     // Scale to create reflection
     glPushMatrix();
-    glTranslatef(0.0f, -2.0f * (-0.9f), 0.0f); // Translate the scene to be reflected correctly on the floor (floor is at y = -0.9)
+    glTranslatef(reflectionOffsetX, -2.0f * (-0.9f), reflectionOffsetZ); // Translate the scene to be reflected correctly on the floor (floor is at y = -0.9)
     glScalef(1.0f, -1.0f, 1.0f); // Flip vertically
+
+    // Adjust reflection brightness based on light intensity
+    glColor4f(pointLightIntensity, pointLightIntensity, pointLightIntensity, 0.5f); // 0.5 for semi-transparent reflection
 
     // Render the scene
     drawRobot();
@@ -593,6 +601,8 @@ void display()
     glTranslatef(camX, camY, camZ);
     drawSkybox();
     glPopMatrix();
+
+    setupLighting(); // Apply the lighting setup
 
     renderReflectedScene(); // Render the reflected scene
 
@@ -806,7 +816,6 @@ void display()
 
     glutSwapBuffers();
 }
-
 void reshape(int width, int height)
 {
     windowWidth = width;
